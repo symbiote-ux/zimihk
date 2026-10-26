@@ -91,10 +91,9 @@ def test_histogram_bins():
     assert histogram(ROWS, 500) == [{"lo": -500, "count": 1}, {"lo": 0, "count": 2}]
 
 
-def test_history_range_no_lookahead():
-    assert history_range(date(2026, 1, 16)) == (date(2026, 1, 2), date(2026, 1, 14))
-    assert history_range(date(2026, 1, 4)) == (date(2026, 1, 2), date(2026, 1, 2))
-    assert history_range(date(2026, 1, 3)) is None and history_range(date(2026, 1, 2)) is None
+def test_history_range_is_last_30_settled_days_no_lookahead():
+    assert history_range(date(2026, 1, 16)) == (date(2025, 12, 16), date(2026, 1, 14))
+    assert history_range(date(2026, 1, 2)) == (date(2025, 12, 2), date(2025, 12, 31))
 
 
 def test_by_hour_uses_london_hour():

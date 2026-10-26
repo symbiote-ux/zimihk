@@ -11,7 +11,10 @@ from statistics import fmean
 from zoneinfo import ZoneInfo
 
 LONDON = ZoneInfo("Europe/London")
-WINDOW = (date(2026, 1, 2), date(2026, 2, 1))  # delivery days for decisions made in Jan 2026
+PILOT = (date(2026, 1, 2), date(2026, 2, 1))  # default view: delivery days for decisions made in Jan 2026
+EARLIEST = date(2023, 1, 1)  # oldest delivery day we serve
+MAX_DAYS = 31  # longest delivery range per request (bounds the Elexon fetch)
+HISTORY_DAYS = 30  # rolling error history behind each decision
 DEFAULT_GATE = time(9, 20)  # EPEX GB day-ahead gate closure, UK time, on D-1
 
 Run = tuple[datetime, float]  # (publish time, forecast MW)
@@ -82,13 +85,15 @@ def series(data: Data, start: date, end: date, gate: time | None = None, horizon
     return rows
 
 
-MIN_HISTORY_DAYS = 3  # settled days needed before showing an uncertainty band
-
-
-def history_range(delivery: date) -> tuple[date, date] | None:
-    """Delivery days whose actuals were fully known at the D-1 gate: window start .. D-2. No look-ahead."""
+def history_range(delivery: date) -> tuple[date, date]:
+    """Last HISTORY_DAYS delivery days fully settled at the D-1 gate: D-31 .. D-2. No look-ahead."""
     end = delivery - timedelta(days=2)
-    return (WINDOW[0], end) if end >= WINDOW[0] else None
+    return end - timedelta(days=HISTORY_DAYS - 1), end
+
+
+def latest_delivery() -> date:
+    """Tomorrow in UK time: the furthest delivery day a buyer can be deciding on today."""
+    return datetime.now(LONDON).date() + timedelta(days=1)
 
 
 def _errors(rows: list[Row]) -> list[tuple[Row, float]]:
