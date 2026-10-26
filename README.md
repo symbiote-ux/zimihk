@@ -2,7 +2,7 @@
 
 A pilot tool for a UK utility's **day-ahead power-purchase desk**. It shows the national wind forecast that was actually available before the day-ahead auction gate, and measures how accurate those forecasts have been. The buyer can then size purchases knowing the typical error.
 
-**Live app:** _added after deployment_ · Data: Elexon BMRS (FUELHH wind actuals, WINDFOR forecasts) for purchase decisions made in January 2026.
+**Live app:** https://zimihk.vercel.app · Data: Elexon BMRS (FUELHH wind actuals, WINDFOR forecasts) for purchase decisions made in January 2026.
 
 ## What it does
 
