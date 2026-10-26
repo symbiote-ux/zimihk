@@ -70,15 +70,16 @@ export function useApi<T>(load: (signal: AbortSignal) => Promise<T>, deps: unkno
   useEffect(() => {
     const controller = new AbortController()
     setState((prev) => ({ ...prev, error: undefined, loading: true }))
-    const timer = setTimeout(() => {
-      load(controller.signal).then(
-        (data) => !controller.signal.aborted && setState({ data, loading: false }),
-        (err) => {
-          if (controller.signal.aborted) return
-          setState((prev) => ({ ...prev, error: err instanceof Error ? err.message : String(err), loading: false }))
-        },
-      )
-    }, DEBOUNCE_MS)
+    const run = async () => {
+      try {
+        const data = await load(controller.signal)
+        if (!controller.signal.aborted) setState({ data, loading: false })
+      } catch (err) {
+        if (controller.signal.aborted) return
+        setState((prev) => ({ ...prev, error: err instanceof Error ? err.message : String(err), loading: false }))
+      }
+    }
+    const timer = setTimeout(run, DEBOUNCE_MS)
     return () => {
       clearTimeout(timer)
       controller.abort()
