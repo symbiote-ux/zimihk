@@ -68,7 +68,7 @@ If wind is over-forecast, they **under-buy**. They then pay for the shortfall at
 5. **Missing data** is shown as gaps, never interpolated. Coverage % is reported.
 6. **Metrics:** MAE, RMSE, **bias**, P50/P90/P99 absolute error and nMAE. No MAPE, because it blows up at low wind.
 7. **No look-ahead.** On decision day X the buyer buys for D = X + 1. The error history behind each decision covers the **last 30 settled delivery days, D−31 … D−2**. Day D−2 is fully settled before the 09:20 gate on D−1.
-8. **The user works one day at a time.** The main screen is a single decision day. Date ranges appear only on the Accuracy page, because measuring accuracy needs many days.
+8. **The user works one day at a time.** The whole app is a single decision day. Accuracy is measured over the 30 settled days before it, so no date range is needed.
 
 ## 4. Product scope
 
@@ -79,11 +79,10 @@ If wind is over-forecast, they **under-buy**. They then pay for the shortfall at
 - A one-sentence brief states the expected wind energy and range, and how far the forecast has run high or low recently.
 - KPI cards: run used, energy (GWh), hourly range, track record (history bias and MAE), and hindsight error.
 
-### B. Forecast accuracy (requirement 2)
-- Pick a date range (up to 31 days) and a mode (at gate, or fixed horizon).
-- Headline callout, e.g. "Forecasts over-predicted wind by 1.7 GW on average, so buying on the raw forecast means systematically under-buying."
-- Tiles: MAE, RMSE, bias, P90, nMAE and coverage.
-- Charts: forecast vs actual over time (zoomable), error vs lead time, error distribution, error by hour of day.
+### B. How reliable is this forecast? (requirement 2, same page under A)
+- No separate tab or date range: accuracy is measured on the 30 settled days before the chosen decision, at the same gate, so it is exactly the track record the buyer has at decision time.
+- Tiles: MAE, bias, P90, RMSE, nMAE and coverage.
+- Charts: error by day (bias bars + MAE line), error by hour of day, error vs lead time (lead times behind this decision shaded).
 
 ### Out of scope
 Demand, prices, other fuels, authentication.
@@ -92,13 +91,13 @@ Demand, prices, other fuels, authentication.
 
 ```
 Browser (React SPA, Vercel CDN)
-   │  GET /api/series?start&end&gate|horizon   GET /api/horizons   GET /api/meta
+   │  GET /api/series?start&end&gate   GET /api/meta
    ▼
 Vercel CDN ── 25-min cache per URL (s-maxage=1500) for successful responses
    │  miss
    ▼
 FastAPI (Python serverless function on Vercel; same app runs in Docker locally)
-   ├── validates input (dates, ≤31 days, gate HH:MM, horizon 0–48) → 422
+   ├── validates input (dates, ≤31 days, gate HH:MM) → 422
    ├── elexon.fetch(first, last) ── FUELHH + WINDFOR in parallel, 25 s timeout → 502 on failure
    └── core.py (pure, stdlib): forecast selection, no-look-ahead history, metrics
 ```
@@ -113,9 +112,8 @@ FastAPI (Python serverless function on Vercel; same app runs in Docker locally)
 ### API
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/meta` | default view (Jan 2026 pilot), selectable range, max days, default gate |
-| GET | `/api/series?start&end&gate=HH:MM` or `&horizon=N` | aligned hourly rows, stats, by-hour, histogram, 30-day history stats |
-| GET | `/api/horizons?start&end` | MAE/bias/P90 at horizons 0, 3, …, 48 h |
+| GET | `/api/meta` | default view (Jan 2026 pilot), selectable range, default gate |
+| GET | `/api/series?start&end&gate=HH:MM` | aligned hourly rows, stats, and 30-day history: stats, by day, by hour, by lead time (0, 3, …, 48 h) |
 
 ### Repo layout
 ```
@@ -169,7 +167,7 @@ Dockerfile, docker-compose.yml, vercel.json, README.md
 
 ## 7. Edge cases & limits
 **Handled (with tests):**
-- Bad input (date before 2023-01-01 or after tomorrow, start > end, range over 31 days, gate `25:00`, horizon `99`) → **422**, and Elexon is never called.
+- Bad input (date before 2023-01-01 or after tomorrow, start > end, range over 31 days, gate `25:00`) → **422**, and Elexon is never called.
 - Elexon timeout or error → **502** JSON, "Elexon BMRS is unavailable or slow right now. Please retry shortly."
 - Unexpected server error → **500** JSON, with the cause logged.
 - Errors are never cached, and the UI shows the message with a **Retry** button.
@@ -204,7 +202,7 @@ Dockerfile, docker-compose.yml, vercel.json, README.md
 1. **Bias-corrected forecast.** The quickest win, because the error is systematic.
 2. **Add demand.** Net requirement = demand − wind, which turns the screen into "buy X MWh for hour H".
 3. **Add prices.** Put a £ value on forecast error.
-4. **Better forecasts.** Benchmark our own wind model against Elexon's on the same accuracy page.
+4. **Better forecasts.** Benchmark our own wind model against Elexon's in the same reliability section.
 
 ## 9. Time plan (≈16 h)
 | # | Block | Est. |
@@ -214,7 +212,7 @@ Dockerfile, docker-compose.yml, vercel.json, README.md
 | 3 | Elexon client + FastAPI endpoints + error handling + API tests | 2 h |
 | 4 | Frontend shell, API client, design system | 1.5 h |
 | 5 | Day-ahead brief page | 2 h |
-| 6 | Accuracy page | 2 h |
+| 6 | Reliability section | 2 h |
 | 7 | Docker, Vercel deploy, incognito check | 1.5 h |
 | 8 | README, polish | 1 h |
 | 9 | Video | 1.5 h |

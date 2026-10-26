@@ -43,7 +43,7 @@ def day(d: str, **kw) -> dict:
 def test_meta():
     m = c.get("/api/meta").json()
     assert (m["start"], m["end"], m["default_gate"]) == ("2026-01-02", "2026-02-01", "09:20")
-    assert (m["min"], m["max"], m["max_days"]) == ("2023-01-01", core.latest_delivery().isoformat(), 31)
+    assert (m["min"], m["max"]) == ("2023-01-01", core.latest_delivery().isoformat())
 
 
 def test_series_one_day_gate():
@@ -63,9 +63,12 @@ def test_series_history_is_last_30_settled_days_and_fetched_once():
     assert calls == [(date(2025, 12, 16), date(2026, 1, 16))]
 
 
-def test_series_horizon_mode():
-    rows = day("2026-01-15", horizon=0)["rows"]
-    assert all(r["publish"] < r["t"] for r in rows if r["publish"])
+def test_history_carries_the_accuracy_breakdowns():
+    h = day("2026-02-01")["history"]  # D-31..D-2 = 1-30 Jan, all inside the fixture
+    assert (h["start"], h["end"]) == ("2026-01-01", "2026-01-30")
+    assert len(h["by_day"]) == 30 and h["by_day"][0]["day"] == "2026-01-01"
+    assert len(h["by_hour"]) == 24
+    assert [x["h"] for x in h["by_horizon"]] == list(range(0, 49, 3))
 
 
 @pytest.mark.parametrize("params", [
@@ -74,16 +77,10 @@ def test_series_horizon_mode():
     {"start": "2026-01-01", "end": "2026-02-05"},  # 36 days > MAX_DAYS
     {"start": "2099-01-01", "end": "2099-01-01"},  # after tomorrow
     {"start": "2026-01-02", "end": "2026-01-02", "gate": "25:00"},
-    {"start": "2026-01-02", "end": "2026-01-02", "horizon": "99"},
 ])
 def test_bad_params_422_without_calling_elexon(params):
     assert c.get("/api/series", params=params).status_code == 422
     assert calls == []
-
-
-def test_horizons_len():
-    assert len(c.get("/api/horizons", params=FULL).json()) == 17
-    assert calls == [(date(2026, 1, 2), date(2026, 2, 1))]
 
 
 def test_elexon_down_is_502_json(monkeypatch):

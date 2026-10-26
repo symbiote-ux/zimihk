@@ -29,13 +29,6 @@ button, input { font: inherit; color: inherit; }
 .masthead { background: var(--surface); border-bottom: 1px solid var(--hair); }
 .masthead-row { display: flex; align-items: center; gap: 32px; min-height: 56px; }
 .brand { font-weight: 600; letter-spacing: -0.01em; font-size: 15px; }
-.tabs { display: flex; gap: 24px; align-self: stretch; }
-.tab {
-  background: none; border: 0; padding: 0; cursor: pointer;
-  color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px;
-}
-.tab:hover { color: var(--ink); }
-.tab[aria-selected='true'] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 500; }
 .asof { margin-left: auto; color: var(--muted); font-size: 12px; }
 
 /* Page heading + controls */
@@ -55,10 +48,6 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
 }
 .field input:hover { border-color: #cfccc3; }
 
-.segmented { display: inline-flex; border: 1px solid var(--hair); border-radius: 2px; background: var(--surface); }
-.segmented button { background: none; border: 0; padding: 6px 12px; cursor: pointer; color: var(--muted); min-height: 32px; }
-.segmented button + button { border-left: 1px solid var(--hair); }
-.segmented button[aria-pressed='true'] { color: var(--surface); background: var(--accent); }
 
 /* Insight callout: a ruled statement, not a card. */
 .callout { border-top: 2px solid var(--amber); padding: 16px 0 20px; margin-bottom: 8px; max-width: 820px; }
@@ -83,6 +72,10 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
 .section { padding: 28px 0 8px; border-bottom: 1px solid var(--hair); }
 .section-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
 .caption { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+.lede { margin: 8px 0 0; max-width: 640px; color: var(--muted); font-size: 14px; }
+.section-intro { padding: 40px 0 8px; border-top: 1px solid var(--hair); margin-top: 24px; }
+.section-intro .caption { max-width: 820px; }
+
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 40px; }
 
 .status { font-size: 12px; color: var(--muted); min-height: 18px; }
@@ -93,8 +86,7 @@ footer.note { padding: 24px 0 48px; font-size: 12px; color: var(--muted); max-wi
 
 @media (max-width: 760px) {
   .wrap { padding: 0 16px; }
-  .masthead-row { flex-wrap: wrap; gap: 8px 24px; padding: 10px 0 0; }
-  .tabs { width: 100%; order: 3; min-height: 40px; }
+  .masthead-row { flex-wrap: wrap; gap: 4px 24px; padding: 10px 0; }
   .asof { margin-left: 0; }
   h1 { font-size: 21px; }
   .kpis { grid-template-columns: 1fr 1fr; }

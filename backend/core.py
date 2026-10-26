@@ -127,22 +127,21 @@ def stats(rows: list[Row]) -> dict:
     }
 
 
-def by_hour(rows: list[Row]) -> list[dict]:
-    buckets: dict[int, list[float]] = {}
+def _group(rows: list[Row], key: str, of) -> list[dict]:
+    buckets: dict = {}
     for r, e in _errors(rows):
-        buckets.setdefault(r.t.astimezone(LONDON).hour, []).append(e)
-    return [
-        {"hour": h, "n": len(es), "mae": fmean(map(abs, es)), "bias": fmean(es)}
-        for h, es in sorted(buckets.items())
-    ]
+        buckets.setdefault(of(r.t.astimezone(LONDON)), []).append(e)
+    return [{key: k, "n": len(es), "mae": fmean(map(abs, es)), "bias": fmean(es)} for k, es in sorted(buckets.items())]
 
 
-def histogram(rows: list[Row], width: int = 500) -> list[dict]:
-    counts: dict[int, int] = {}
-    for _, e in _errors(rows):
-        lo = math.floor(e / width) * width
-        counts[lo] = counts.get(lo, 0) + 1
-    return [{"lo": lo, "count": c} for lo, c in sorted(counts.items())]
+def by_hour(rows: list[Row]) -> list[dict]:
+    return _group(rows, "hour", lambda t: t.hour)
+
+
+def by_day(rows: list[Row]) -> list[dict]:
+    """Per delivery day (London date): how wrong was the forecast that day."""
+    return _group(rows, "day", lambda t: t.date().isoformat())
+
 
 
 def by_horizon(data: Data, start: date, end: date, horizons=range(0, 49, 3)) -> list[dict]:

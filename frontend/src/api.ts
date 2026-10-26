@@ -14,17 +14,25 @@ export type Stats = {
   err_p10: number | null
   err_p90: number | null
 }
-export type History = { start: string; end: string; days: number; stats: Stats } | null
+type Breakdown = { n: number; mae: number; bias: number }
+export type HorizonPoint = { h: number; n: number; mae: number | null; bias: number | null; p90: number | null }
+/** Accuracy over the settled days before the decision (no look-ahead). */
+export type History = {
+  start: string
+  end: string
+  days: number
+  stats: Stats
+  by_day: (Breakdown & { day: string })[]
+  by_hour: (Breakdown & { hour: number })[]
+  by_horizon: HorizonPoint[]
+} | null
 export type SeriesResponse = {
   rows: Row[]
   stats: Stats
-  by_hour: { hour: number; n: number; mae: number; bias: number }[]
-  histogram: { lo: number; count: number }[]
   history: History
 }
-export type HorizonPoint = { h: number; n: number; mae: number | null; bias: number | null; p90: number | null }
 /** start/end = default pilot view (Jan 2026); min/max = selectable delivery days. */
-export type Meta = { start: string; end: string; min: string; max: string; max_days: number; default_gate: string }
+export type Meta = { start: string; end: string; min: string; max: string; default_gate: string }
 
 /** FastAPI errors are {detail: string} or, for validation, {detail: [{msg}]}. */
 export async function errorMessage(res: Response): Promise<string> {
@@ -49,8 +57,6 @@ async function get<T>(path: string, params: Record<string, string | number | und
 export const getMeta = (signal?: AbortSignal) => get<Meta>('meta', {}, signal)
 export const getSeries = (p: { start: string; end: string; gate?: string; horizon?: number }, signal?: AbortSignal) =>
   get<SeriesResponse>('series', p, signal)
-export const getHorizons = (start: string, end: string, signal?: AbortSignal) =>
-  get<HorizonPoint[]>('horizons', { start, end }, signal)
 
 const DEBOUNCE_MS = 250 // each request costs a live Elexon pull: wait for inputs to settle
 
@@ -81,7 +87,6 @@ export function useApi<T>(load: (signal: AbortSignal) => Promise<T>, deps: unkno
   return { ...state, retry: () => setAttempt((n) => n + 1) }
 }
 
-export const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
 
 const london = (opts: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', ...opts })
 const dtFmt = london({ weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })

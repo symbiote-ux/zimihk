@@ -1,15 +1,11 @@
 // Runs with TZ=Pacific/Kiritimati (UTC+14): UK-time formatting must not depend on the viewer's timezone.
 import { describe, expect, it } from 'vitest'
-import { addDays, daysBetween, errorMessage, fmtDay, fmtHour, fmtLondon, gw, signedGw } from './api'
+import { addDays, errorMessage, fmtDay, fmtHour, fmtLondon, gw, signedGw } from './api'
 
 describe('date helpers', () => {
   it('adds days across month and year boundaries', () => {
     expect(addDays('2026-01-31', 1)).toBe('2026-02-01')
     expect(addDays('2026-01-01', -1)).toBe('2025-12-31')
-  })
-
-  it('counts days between calendar dates', () => {
-    expect(daysBetween('2026-01-02', '2026-02-01')).toBe(30)
   })
 })
 

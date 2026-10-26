@@ -63,7 +63,6 @@ def meta() -> dict:
         "end": hi.isoformat(),
         "min": core.EARLIEST.isoformat(),
         "max": core.latest_delivery().isoformat(),
-        "max_days": core.MAX_DAYS,
         "default_gate": core.DEFAULT_GATE.strftime("%H:%M"),
     }
 
@@ -73,31 +72,26 @@ def series(
     start: date,
     end: date,
     gate: str = Query("09:20", pattern=r"^([01]\d|2[0-3]):[0-5]\d$"),
-    horizon: int | None = Query(None, ge=0, le=48),
 ) -> dict:
     _check_range(start, end)
     g = time.fromisoformat(gate)
     hist = core.history_range(start)
     data = elexon.fetch(hist[0], end)  # one Elexon pull covers both the history and the selection
-    rows = core.series(data, start, end, gate=g, horizon=horizon)
+    rows = core.series(data, start, end, gate=g)
+    past = core.series(data, *hist, gate=g)
     return {
         "rows": [_row(r) for r in rows],
-        "stats": core.stats(rows),
-        "by_hour": core.by_hour(rows),
-        "histogram": core.histogram(rows),
-        "history": {
+        "stats": core.stats(rows),  # hindsight: known only after delivery
+        "history": {  # the quantified error available at decision time
             "start": hist[0].isoformat(),
             "end": hist[1].isoformat(),
             "days": core.HISTORY_DAYS,
-            "stats": core.stats(core.series(data, *hist, gate=g, horizon=horizon)),
+            "stats": core.stats(past),
+            "by_day": core.by_day(past),
+            "by_hour": core.by_hour(past),
+            "by_horizon": core.by_horizon(data, *hist),
         },
     }
-
-
-@app.get("/api/horizons")
-def horizons(start: date, end: date) -> list[dict]:
-    _check_range(start, end)
-    return core.by_horizon(elexon.fetch(start, end), start, end)
 
 
 if (HERE / "static").is_dir():  # built SPA, present in the Docker image only

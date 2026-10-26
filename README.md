@@ -6,10 +6,12 @@ A decision-support tool for a UK utility's **day-ahead power-purchase desk**. It
 
 ## What it does
 
-| Page | Question it answers |
+A day-ahead buyer must decide, before the 09:20 gate, how much power to buy for tomorrow. Wind covers part of demand, so the buyer needs to know how much wind to count on and how far to trust that number. One page, driven by two inputs (decision day and gate time), answers both:
+
+| Section | Question it answers |
 |---|---|
-| **Day-ahead brief** | "It's decision day X. What does the latest forecast say about tomorrow, and how wrong has it tended to be?" It shows the forecast run published before the gate (default 09:20 UK, editable), with a P10–P90 band built **only from the 30 days already settled before the decision**. |
-| **Forecast accuracy** | "How good are these forecasts?" It covers MAE, RMSE, bias, P90 error, nMAE and coverage, error vs lead time, the error distribution and error by hour of day, for any range of up to 31 days, at the gate or at a fixed horizon (0–48 h). |
+| **Day-ahead brief** | "What does the latest forecast before the gate say about tomorrow?" It shows the forecast run published before the gate (default 09:20 UK, editable), with a P10–P90 band built **only from the 30 days already settled before the decision**. |
+| **How reliable is this forecast?** | "How wrong has that same forecast been recently?" Over the 30 settled days before the decision: MAE, bias, P90 error, RMSE, nMAE and coverage; error by day; error by hour of day; error vs lead time, with the lead times behind this decision shaded. |
 
 The headline finding: for January 2026 decisions, the forecast available at the 09:20 gate **over-predicted wind by ~1.75 GW on average** (MAE 2.02 GW, 1 hour in 10 off by more than 4.2 GW). A buyer trusting the raw number would systematically under-buy. Curtailment is a plausible cause, because actuals are metered output after balancing actions; this is a hypothesis to confirm.
 
@@ -46,9 +48,9 @@ Lint: `.venv/bin/ruff check backend`. Type-check: `cd frontend && npm run build`
 
 ```
 backend/
-  core.py           pure domain logic: forecast selection (gate / horizon), 30-day no-look-ahead history, metrics
+  core.py           pure domain logic: forecast selection at the gate, 30-day no-look-ahead history, metrics and breakdowns
   elexon.py         Elexon BMRS client: FUELHH + WINDFOR fetched in parallel, 25 s timeout, ElexonError
-  app.py            FastAPI: /api/meta, /api/series, /api/horizons; validation, JSON errors, cache headers;
+  app.py            FastAPI: /api/meta, /api/series; validation, JSON errors, cache headers;
                     serves the built UI if backend/static exists (Docker)
   fetch_data.py     regenerates the offline test fixture
   data/             January 2026 test fixture (gzipped JSON)
@@ -58,9 +60,8 @@ backend/
   test_integration.py  live Elexon tests (pytest -m integration)
   pytest.ini        marks live tests; skipped by default
 frontend/src/
-  App.tsx           shell + tabs
-  DayAhead.tsx      Day-ahead brief page
-  Accuracy.tsx      Forecast accuracy page
+  App.tsx           shell
+  DayAhead.tsx      the page: day-ahead brief + forecast reliability
   Chart.tsx         thin ECharts wrapper + shared chart styling
   api.ts            typed API client; useApi hook (wait for inputs to settle, cancel, retry); UK-time formatting
   api.test.ts       Vitest unit tests
@@ -100,8 +101,7 @@ See [PLAN.md](PLAN.md) for the reasoning and trade-offs.
   - dates before 2023-01-01 or after tomorrow;
   - start after end;
   - ranges over 31 days;
-  - a malformed gate (`25:00`);
-  - a horizon outside 0–48.
+  - a malformed gate (`25:00`).
 - **Elexon slow or down → 502** JSON: "Elexon BMRS is unavailable or slow right now. Please retry shortly." The client has a 25 s timeout per dataset.
 - **Unexpected server error → 500** JSON `{"detail": "Internal server error"}`, with the stack trace logged server-side. Internals are never leaked.
 - **The UI shows every error with a Retry button**, and loading states say data is coming live from Elexon.

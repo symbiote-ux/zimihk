@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime, time
 
 import pytest
 
-from core import Row, by_horizon, by_hour, gate_cutoff, histogram, history_range, load, pick, series, stats, targets
+from core import Row, by_day, by_horizon, by_hour, gate_cutoff, history_range, load, pick, series, stats, targets
 
 
 def dt(s: str) -> datetime:
@@ -87,13 +87,15 @@ def test_stats_empty_is_none_not_error():
     assert stats([])["coverage"] == 0
 
 
-def test_histogram_bins():
-    assert histogram(ROWS, 500) == [{"lo": -500, "count": 1}, {"lo": 0, "count": 2}]
-
-
 def test_history_range_is_last_30_settled_days_no_lookahead():
     assert history_range(date(2026, 1, 16)) == (date(2025, 12, 16), date(2026, 1, 14))
     assert history_range(date(2026, 1, 2)) == (date(2025, 12, 2), date(2025, 12, 31))
+
+
+def test_by_day_groups_errors_by_london_date():
+    out = by_day(ROWS + [Row(dt("2026-07-01T23:00"), 10, 12, P)])  # 23:00Z in BST is 00:00 on 2 Jul
+    assert [d["day"] for d in out] == ["2026-01-02", "2026-07-02"]
+    assert out[0]["n"] == 3 and out[0]["mae"] == pytest.approx(7 / 3) and out[0]["bias"] == pytest.approx(-1)
 
 
 def test_by_hour_uses_london_hour():
