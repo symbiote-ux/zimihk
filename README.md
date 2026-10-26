@@ -33,9 +33,9 @@ cd frontend && npm ci && npm run dev                          # UI on :5173, pro
 
 | Layer | What | Command |
 |---|---|---|
-| Unit (backend) | Forecast selection, no-look-ahead history, metrics (`test_core.py`); Elexon client request windows, hindcast filter, error mapping, with the network faked (`test_elexon.py`) | `cd backend && ../.venv/bin/pytest -q` |
+| Unit (backend) | Forecast selection, no-look-ahead history, metrics (`test_core.py`); Elexon client request windows, hindcast filter, error mapping, with the network faked (`test_elexon.py`) | `cd backend && ../.venv/bin/pytest` |
 | API (backend) | FastAPI endpoints with Elexon replaced by a frozen January 2026 fixture: validation (422), Elexon down (502), unexpected error (500), cache headers (`test_app.py`) | (same command) |
-| Integration | Live Elexon API: the real 07:30 gate run, and the full API reproducing the January baseline exactly (`test_integration.py`) | `cd backend && ../.venv/bin/pytest -q -m integration` |
+| Integration | Live Elexon API: the real 07:30 gate run, and the full API reproducing the January baseline exactly (`test_integration.py`) | `cd backend && ../.venv/bin/pytest -m integration` |
 | Unit (frontend) | Date maths, UK-time formatting under a UTC+14 viewer timezone, number formatting, API error parsing (`src/api.test.ts`) | `cd frontend && npm test` |
 
 Lint: `.venv/bin/ruff check backend`. Type-check: `cd frontend && npm run build`.
