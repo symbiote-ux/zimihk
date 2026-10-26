@@ -4,8 +4,10 @@ All datetimes are tz-aware UTC. Delivery days and the gate are Europe/London.
 Error is always forecast - actual (positive = over-forecast).
 """
 
+import math
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from statistics import fmean
 from zoneinfo import ZoneInfo
 
 LONDON = ZoneInfo("Europe/London")
@@ -78,3 +80,69 @@ def series(data: Data, start: date, end: date, gate: time | None = None, horizon
         hit = pick(data.runs.get(t, []), cutoff, t)
         rows.append(Row(t, data.actuals.get(t), hit and hit[1], hit and hit[0]))
     return rows
+
+
+MIN_HISTORY_DAYS = 3  # settled days needed before showing an uncertainty band
+
+
+def history_range(delivery: date) -> tuple[date, date] | None:
+    """Delivery days whose actuals were fully known at the D-1 gate: window start .. D-2. No look-ahead."""
+    end = delivery - timedelta(days=2)
+    return (WINDOW[0], end) if end >= WINDOW[0] else None
+
+
+def _errors(rows: list[Row]) -> list[tuple[Row, float]]:
+    return [(r, r.forecast - r.actual) for r in rows if r.forecast is not None and r.actual is not None]
+
+
+def _q(sorted_vals: list[float], p: float) -> float:
+    return sorted_vals[min(len(sorted_vals) - 1, int(p * len(sorted_vals)))]  # nearest rank
+
+
+def stats(rows: list[Row]) -> dict:
+    pairs = _errors(rows)
+    n = len(pairs)
+    out = {"n": n, "coverage": n / len(rows) if rows else 0}
+    if not n:
+        return out | dict.fromkeys(["mae", "rmse", "bias", "nmae", "p50", "p90", "p99", "err_p10", "err_p90"])
+    errs = sorted(e for _, e in pairs)
+    abs_errs = sorted(abs(e) for e in errs)
+    mae = fmean(abs_errs)
+    mean_actual = fmean(r.actual for r, _ in pairs)
+    return out | {
+        "mae": mae,
+        "rmse": math.sqrt(fmean(e * e for e in errs)),
+        "bias": fmean(errs),
+        "nmae": mae / mean_actual if mean_actual else None,
+        "p50": _q(abs_errs, 0.5),
+        "p90": _q(abs_errs, 0.9),
+        "p99": _q(abs_errs, 0.99),
+        "err_p10": _q(errs, 0.1),
+        "err_p90": _q(errs, 0.9),
+    }
+
+
+def by_hour(rows: list[Row]) -> list[dict]:
+    buckets: dict[int, list[float]] = {}
+    for r, e in _errors(rows):
+        buckets.setdefault(r.t.astimezone(LONDON).hour, []).append(e)
+    return [
+        {"hour": h, "n": len(es), "mae": fmean(map(abs, es)), "bias": fmean(es)}
+        for h, es in sorted(buckets.items())
+    ]
+
+
+def histogram(rows: list[Row], width: int = 500) -> list[dict]:
+    counts: dict[int, int] = {}
+    for _, e in _errors(rows):
+        lo = math.floor(e / width) * width
+        counts[lo] = counts.get(lo, 0) + 1
+    return [{"lo": lo, "count": c} for lo, c in sorted(counts.items())]
+
+
+def by_horizon(data: Data, start: date, end: date, horizons=range(0, 49, 3)) -> list[dict]:
+    out = []
+    for h in horizons:
+        s = stats(series(data, start, end, horizon=h))
+        out.append({"h": h, "n": s["n"], "mae": s["mae"], "bias": s["bias"], "p90": s["p90"]})
+    return out
