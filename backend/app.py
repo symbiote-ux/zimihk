@@ -72,10 +72,13 @@ def series(
     start: date,
     end: date,
     gate: str = Query("09:20", pattern=r"^([01]\d|2[0-3]):[0-5]\d$"),
+    history_days: int = core.HISTORY_DAYS,
 ) -> dict:
     _check_range(start, end)
+    if history_days not in core.HISTORY_CHOICES:
+        raise HTTPException(422, f"history_days must be one of {core.HISTORY_CHOICES}")
     gate_time = time.fromisoformat(gate)
-    hist_start, hist_end = core.history_range(start)
+    hist_start, hist_end = core.history_range(start, history_days)
     data = elexon.fetch(hist_start, end)  # one Elexon pull covers both the history and the selection
     rows = core.series(data, start, end, gate=gate_time)
     past = core.series(data, hist_start, hist_end, gate=gate_time)
@@ -85,7 +88,7 @@ def series(
         "history": {  # the quantified error available at decision time
             "start": hist_start.isoformat(),
             "end": hist_end.isoformat(),
-            "days": core.HISTORY_DAYS,
+            "days": history_days,
             "stats": core.stats(past),
             "by_day": core.by_day(past),
             "by_hour": core.by_hour(past),

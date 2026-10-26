@@ -14,7 +14,8 @@ LONDON = ZoneInfo("Europe/London")
 PILOT = (date(2026, 1, 2), date(2026, 2, 1))  # default view: delivery days for decisions made in Jan 2026
 EARLIEST = date(2023, 1, 1)  # oldest delivery day we serve
 MAX_DAYS = 31  # longest delivery range per request (bounds the Elexon fetch)
-HISTORY_DAYS = 30  # rolling error history behind each decision
+HISTORY_DAYS = 30  # default rolling error history behind each decision
+HISTORY_CHOICES = (7, 14, 30)  # windows the UI offers
 DEFAULT_GATE = time(9, 20)  # EPEX GB day-ahead gate closure, UK time, on D-1
 
 Run = tuple[datetime, float]  # (publish time, forecast MW)
@@ -88,10 +89,10 @@ def series(data: Data, start: date, end: date, gate: time | None = None, horizon
     return rows
 
 
-def history_range(delivery: date) -> tuple[date, date]:
-    """Last HISTORY_DAYS delivery days fully settled at the D-1 gate: D-31 .. D-2. No look-ahead."""
+def history_range(delivery: date, days: int = HISTORY_DAYS) -> tuple[date, date]:
+    """Last `days` delivery days fully settled at the D-1 gate, ending D-2 (D-31 .. D-2 for 30). No look-ahead."""
     end = delivery - timedelta(days=2)
-    return end - timedelta(days=HISTORY_DAYS - 1), end
+    return end - timedelta(days=days - 1), end
 
 
 def latest_delivery() -> date:

@@ -10,8 +10,8 @@ A day-ahead buyer must decide, before the 09:20 gate, how much power to buy for 
 
 | Section | Question it answers |
 |---|---|
-| **Day-ahead brief** | "What does the latest forecast before the gate say about tomorrow?" It shows the forecast run published before the gate (default 09:20 UK, editable), with a P10–P90 band built **only from the 30 days already settled before the decision**. |
-| **How reliable is this forecast?** | "How wrong has that same forecast been recently?" Over the 30 settled days before the decision: MAE, bias, P90 error, RMSE, nMAE and coverage; error by day; error by hour of day; error vs lead time, with the lead times behind this decision shaded. |
+| **Day-ahead brief** | "What does the latest forecast before the gate say about tomorrow?" It shows the forecast run published before the gate (default 09:20 UK, editable), with a P10–P90 band built **only from days already settled before the decision** (last 7, 14 or 30; default 30). |
+| **How reliable is this forecast?** | "How wrong has that same forecast been recently?" Over the last 7, 14 or 30 settled days before the decision (History switch, default 30): MAE, bias, P90 error, RMSE, nMAE and coverage; error by day; error by hour of day; error vs lead time, with the lead times behind this decision shaded. |
 
 The headline finding: for January 2026 decisions, the forecast available at the 09:20 gate **over-predicted wind by ~1.75 GW on average** (MAE 2.02 GW, 1 hour in 10 off by more than 4.2 GW). A buyer trusting the raw number would systematically under-buy. Curtailment is a plausible cause, because actuals are metered output after balancing actions; this is a hypothesis to confirm.
 
@@ -48,7 +48,7 @@ Lint: `.venv/bin/ruff check backend`. Type-check: `cd frontend && npm run build`
 
 ```
 backend/
-  core.py              pure domain logic: forecast selection at the gate, 30-day no-look-ahead history,
+  core.py              pure domain logic: forecast selection at the gate, 7/14/30-day no-look-ahead history,
                        metrics (MAE, RMSE, bias, nMAE, P50/P90/P99) and breakdowns by day, hour and lead time
   elexon.py            Elexon BMRS client: FUELHH + WINDFOR fetched in parallel, hindcasts dropped,
                        25 s timeout, ElexonError
@@ -99,7 +99,7 @@ PLAN.md                requirements analysis, domain research, design decisions,
 React SPA (Vercel CDN) → Vercel edge cache (25 min) → FastAPI function → Elexon BMRS (live)
 ```
 
-- Each API request fetches exactly the delivery days it needs, plus their 30-day history, from Elexon. The two datasets are pulled in parallel, and the pure `core.py` computes the result.
+- Each API request fetches exactly the delivery days it needs, plus their 7–30-day history, from Elexon. The two datasets are pulled in parallel, and the pure `core.py` computes the result.
 - FastAPI is the only backend dependency.
 - On **Vercel** (free, allowed by the brief), the UI is served from the CDN and the API runs as a Python function.
 - **Docker** runs the same app as a single container for local use and CI.

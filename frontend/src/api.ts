@@ -55,7 +55,10 @@ async function get<T>(path: string, params: Record<string, string | number | und
 }
 
 export const getMeta = (signal?: AbortSignal) => get<Meta>('meta', {}, signal)
-export const getSeries = (params: { start: string; end: string; gate?: string }, signal?: AbortSignal) =>
+export const getSeries = (
+  params: { start: string; end: string; gate?: string; history_days?: number },
+  signal?: AbortSignal,
+) =>
   get<SeriesResponse>('series', params, signal)
 
 const DEBOUNCE_MS = 250 // each request costs a live Elexon pull: wait for inputs to settle

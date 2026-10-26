@@ -94,6 +94,7 @@ def test_stats_empty_is_none_not_error():
 def test_history_range_is_last_30_settled_days_no_lookahead():
     assert history_range(date(2026, 1, 16)) == (date(2025, 12, 16), date(2026, 1, 14))
     assert history_range(date(2026, 1, 2)) == (date(2025, 12, 2), date(2025, 12, 31))
+    assert history_range(date(2026, 1, 16), days=7) == (date(2026, 1, 8), date(2026, 1, 14))
 
 
 def test_by_day_groups_errors_by_london_date():

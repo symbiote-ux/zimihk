@@ -67,8 +67,8 @@ If wind is over-forecast, they **under-buy**. They then pay for the shortfall at
 4. **Resolution:** compare hourly, at HH:00, against the FUELHH half-hour starting at HH:00.
 5. **Missing data** is shown as gaps, never interpolated. Coverage % is reported.
 6. **Metrics:** MAE, RMSE, **bias**, P50/P90/P99 absolute error and nMAE. No MAPE, because it blows up at low wind.
-7. **No look-ahead.** On decision day X the buyer buys for D = X + 1. The error history behind each decision covers the **last 30 settled delivery days, D−31 … D−2**. Day D−2 is fully settled before the 09:20 gate on D−1.
-8. **The user works one day at a time.** The whole app is a single decision day. Accuracy is measured over the 30 settled days before it, so no date range is needed.
+7. **No look-ahead.** On decision day X the buyer buys for D = X + 1. The error history behind each decision covers the **last 30 settled delivery days, D−31 … D−2** by default; the buyer can switch to the last 7 or 14 (always ending D−2). Day D−2 is fully settled before the 09:20 gate on D−1.
+8. **The user works one day at a time.** The whole app is a single decision day. Accuracy is measured over the settled days before it (7, 14 or 30), so no date range is needed.
 
 ## 4. Product scope
 
@@ -80,7 +80,7 @@ If wind is over-forecast, they **under-buy**. They then pay for the shortfall at
 - KPI cards: run used, energy (GWh), hourly range, track record (history bias and MAE), and hindsight error.
 
 ### B. How reliable is this forecast? (requirement 2, same page under A)
-- No separate tab or date range: accuracy is measured on the 30 settled days before the chosen decision, at the same gate, so it is exactly the track record the buyer has at decision time.
+- No separate tab or date range: accuracy is measured on the last 7, 14 or 30 settled days (History switch; default 30) before the chosen decision, at the same gate, so it is exactly the track record the buyer has at decision time.
 - Tiles: MAE, bias, P90, RMSE, nMAE and coverage.
 - Charts: error by day (bias bars + MAE line), error by hour of day, error vs lead time (lead times behind this decision shaded).
 
@@ -91,7 +91,7 @@ Demand, prices, other fuels, authentication.
 
 ```
 Browser (React SPA, Vercel CDN)
-   │  GET /api/series?start&end&gate   GET /api/meta
+   │  GET /api/series?start&end&gate&history_days   GET /api/meta
    ▼
 Vercel CDN ── 25-min cache per URL (s-maxage=1500) for successful responses
    │  miss
@@ -113,7 +113,7 @@ FastAPI (Python serverless function on Vercel; same app runs in Docker locally)
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/meta` | default view (Jan 2026 pilot), selectable range, default gate |
-| GET | `/api/series?start&end&gate=HH:MM` | aligned hourly rows, stats, and 30-day history: stats, by day, by hour, by lead time (0, 3, …, 48 h) |
+| GET | `/api/series?start&end&gate=HH:MM&history_days=7\|14\|30` | aligned hourly rows, stats, and history (default 30 days): stats, by day, by hour, by lead time (0, 3, …, 48 h) |
 
 ### Repo layout
 ```

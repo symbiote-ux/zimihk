@@ -4,17 +4,19 @@ import { addDays, fmtDay, fmtHour, fmtLondon, getSeries, gw, signedGw, useApi, t
 import { COLORS, Chart, axis } from './Chart'
 
 const GATE_RE = /^([01]\d|2[0-3]):[0-5]\d$/
+const HISTORY_CHOICES = [7, 14, 30] // mirrors core.HISTORY_CHOICES
 
 export default function DayAhead({ meta }: { meta: Meta }) {
   const first = addDays(meta.start, -1) // Jan 2026 pilot: decision 1 Jan → delivery 2 Jan
   const [decision, setDecision] = useState(first)
   const [gateInput, setGateInput] = useState(meta.default_gate)
   const [gate, setGate] = useState(meta.default_gate)
+  const [historyDays, setHistoryDays] = useState(30)
   const delivery = addDays(decision, 1)
 
   const { data, error, loading, retry } = useApi(
-    (signal) => getSeries({ start: delivery, end: delivery, gate }, signal),
-    [delivery, gate],
+    (signal) => getSeries({ start: delivery, end: delivery, gate, history_days: historyDays }, signal),
+    [delivery, gate, historyDays],
   )
 
   const rows = data?.rows ?? []
@@ -104,6 +106,16 @@ export default function DayAhead({ meta }: { meta: Meta }) {
                 if (GATE_RE.test(event.target.value)) setGate(event.target.value)
               }} />
           </label>
+          <div className="field">
+            <span className="label">History</span>
+            <div className="segmented" role="group" aria-label="History window">
+              {HISTORY_CHOICES.map((days) => (
+                <button key={days} type="button" aria-pressed={historyDays === days} onClick={() => setHistoryDays(days)}>
+                  {days} days
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 

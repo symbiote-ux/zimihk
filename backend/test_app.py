@@ -63,6 +63,13 @@ def test_series_history_is_last_30_settled_days_and_fetched_once():
     assert calls == [(date(2025, 12, 16), date(2026, 1, 16))]
 
 
+def test_history_window_can_be_7_days_and_fetch_shrinks_with_it():
+    history = day("2026-01-16", history_days=7)["history"]
+    assert (history["start"], history["end"], history["days"]) == ("2026-01-08", "2026-01-14", 7)
+    assert len(history["by_day"]) == 7
+    assert calls == [(date(2026, 1, 8), date(2026, 1, 16))]
+
+
 def test_history_carries_the_accuracy_breakdowns():
     history = day("2026-02-01")["history"]  # D-31..D-2 = 1-30 Jan, all inside the fixture
     assert (history["start"], history["end"]) == ("2026-01-01", "2026-01-30")
@@ -77,6 +84,7 @@ def test_history_carries_the_accuracy_breakdowns():
     {"start": "2026-01-01", "end": "2026-02-05"},  # 36 days > MAX_DAYS
     {"start": "2099-01-01", "end": "2099-01-01"},  # after tomorrow
     {"start": "2026-01-02", "end": "2026-01-02", "gate": "25:00"},
+    {"start": "2026-01-02", "end": "2026-01-02", "history_days": 10},  # only 7, 14 or 30
 ])
 def test_bad_params_422_without_calling_elexon(params):
     assert client.get("/api/series", params=params).status_code == 422
