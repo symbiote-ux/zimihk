@@ -21,11 +21,11 @@ export default function App() {
               </button>
             ))}
           </nav>
-          <span className="asof">GB national wind · Elexon BMRS · Jan 2026 decisions</span>
+          <span className="asof">GB national wind · live from Elexon BMRS</span>
         </div>
       </header>
       <main className="wrap">
-        {meta.error && <p className="error">Could not reach the API: {meta.error}</p>}
+        {meta.error && <p className="error">Could not reach the API: {meta.error} <button className="retry" onClick={meta.retry}>Retry</button></p>}
         {meta.data && (tab === 'brief' ? <DayAhead meta={meta.data} /> : <Accuracy meta={meta.data} />)}
       </main>
     </>

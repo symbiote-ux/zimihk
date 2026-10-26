@@ -23,37 +23,65 @@ export type SeriesResponse = {
   history: History
 }
 export type HorizonPoint = { h: number; n: number; mae: number | null; bias: number | null; p90: number | null }
-export type Meta = { start: string; end: string; default_gate: string }
+/** start/end = default pilot view (Jan 2026); min/max = selectable delivery days. */
+export type Meta = { start: string; end: string; min: string; max: string; max_days: number; default_gate: string }
 
-async function get<T>(path: string, params: Record<string, string | number | undefined> = {}): Promise<T> {
+/** FastAPI errors are {detail: string} or, for validation, {detail: [{msg}]}. */
+async function errorMessage(res: Response): Promise<string> {
+  try {
+    const { detail } = await res.json()
+    if (typeof detail === 'string') return detail
+    if (Array.isArray(detail)) return detail.map((d) => d.msg).join('; ')
+  } catch {
+    /* not JSON: fall through */
+  }
+  return `Request failed (${res.status})`
+}
+
+async function get<T>(path: string, params: Record<string, string | number | undefined>, signal?: AbortSignal): Promise<T> {
   const qs = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) if (v !== undefined) qs.set(k, String(v))
-  const res = await fetch(`/api/${path}?${qs}`)
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
+  const res = await fetch(`/api/${path}?${qs}`, { signal })
+  if (!res.ok) throw new Error(await errorMessage(res))
   return res.json()
 }
 
-export const getMeta = () => get<Meta>('meta')
-export const getSeries = (p: { start: string; end: string; gate?: string; horizon?: number }) =>
-  get<SeriesResponse>('series', p)
-export const getHorizons = (start: string, end: string) => get<HorizonPoint[]>('horizons', { start, end })
+export const getMeta = (signal?: AbortSignal) => get<Meta>('meta', {}, signal)
+export const getSeries = (p: { start: string; end: string; gate?: string; horizon?: number }, signal?: AbortSignal) =>
+  get<SeriesResponse>('series', p, signal)
+export const getHorizons = (start: string, end: string, signal?: AbortSignal) =>
+  get<HorizonPoint[]>('horizons', { start, end }, signal)
 
-/** Runs an async loader whenever deps change; ignores responses that arrive after a newer request. */
-export function useApi<T>(load: () => Promise<T>, deps: unknown[]) {
+const DEBOUNCE_MS = 250 // each request costs a live Elexon pull: wait for inputs to settle
+
+/**
+ * Runs an async loader when deps change: waits for inputs to settle, cancels the request it replaces,
+ * and never lets a stale response overwrite a newer one. `retry` re-runs the current request.
+ */
+export function useApi<T>(load: (signal: AbortSignal) => Promise<T>, deps: unknown[]) {
   const [state, setState] = useState<{ data?: T; error?: string; loading: boolean }>({ loading: true })
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
-    let live = true
-    setState((s) => ({ ...s, loading: true }))
-    load().then(
-      (data) => live && setState({ data, loading: false }),
-      (e) => live && setState({ error: e instanceof Error ? e.message : String(e), loading: false }),
-    )
+    const ctrl = new AbortController()
+    setState((s) => ({ ...s, error: undefined, loading: true }))
+    const timer = setTimeout(() => {
+      load(ctrl.signal).then(
+        (data) => !ctrl.signal.aborted && setState({ data, loading: false }),
+        (e) => {
+          if (ctrl.signal.aborted) return
+          setState((s) => ({ ...s, error: e instanceof Error ? e.message : String(e), loading: false }))
+        },
+      )
+    }, DEBOUNCE_MS)
     return () => {
-      live = false
+      clearTimeout(timer)
+      ctrl.abort()
     }
-  }, deps) // eslint-disable-line react-hooks/exhaustive-deps
-  return state
+  }, [...deps, attempt]) // eslint-disable-line react-hooks/exhaustive-deps
+  return { ...state, retry: () => setAttempt((n) => n + 1) }
 }
+
+export const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
 
 const london = (opts: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', ...opts })
 const dtFmt = london({ weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })

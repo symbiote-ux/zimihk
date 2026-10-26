@@ -7,13 +7,16 @@ const MIN_HISTORY_DAYS = 3 // mirrors core.MIN_HISTORY_DAYS
 const GATE_RE = /^([01]\d|2[0-3]):[0-5]\d$/
 
 export default function DayAhead({ meta }: { meta: Meta }) {
-  const first = addDays(meta.start, -1)
+  const first = addDays(meta.start, -1) // Jan 2026 pilot: decision 1 Jan → delivery 2 Jan
   const [decision, setDecision] = useState(first)
   const [gateInput, setGateInput] = useState(meta.default_gate)
   const [gate, setGate] = useState(meta.default_gate)
   const delivery = addDays(decision, 1)
 
-  const { data, error, loading } = useApi(() => getSeries({ start: delivery, end: delivery, gate }), [delivery, gate])
+  const { data, error, loading, retry } = useApi(
+    (signal) => getSeries({ start: delivery, end: delivery, gate }, signal),
+    [delivery, gate],
+  )
 
   const rows = data?.rows ?? []
   const fc = rows.flatMap((r) => (r.forecast == null ? [] : [r.forecast]))
@@ -84,7 +87,7 @@ export default function DayAhead({ meta }: { meta: Meta }) {
         <div className="controls">
           <label className="field">
             <span className="label">Decision day</span>
-            <input type="date" min={first} max={addDays(meta.end, -1)} value={decision}
+            <input type="date" min={addDays(meta.min, -1)} max={addDays(meta.max, -1)} value={decision}
               onChange={(e) => e.target.value && setDecision(e.target.value)} />
           </label>
           <label className="field">
@@ -98,7 +101,8 @@ export default function DayAhead({ meta }: { meta: Meta }) {
         </div>
       </div>
 
-      {error && <p className="error">Could not load this day: {error}</p>}
+      {error && <p className="error">Could not load this day: {error} <button className="retry" onClick={retry}>Retry</button></p>}
+      {!data && !error && <p className="status">Loading live data from Elexon…</p>}
 
       {data && (
         <>

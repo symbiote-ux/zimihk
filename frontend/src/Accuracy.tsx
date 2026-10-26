@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { EChartsOption } from 'echarts'
-import { fmtDay, fmtLondon, getHorizons, getSeries, gw, signedGw, useApi, type Meta } from './api'
+import { daysBetween, fmtDay, fmtLondon, getHorizons, getSeries, gw, signedGw, useApi, type Meta } from './api'
 import { C, Chart, axis } from './Chart'
 
 const GATE_RE = /^([01]\d|2[0-3]):[0-5]\d$/
@@ -15,16 +15,21 @@ export default function Accuracy({ meta }: { meta: Meta }) {
   const [gate, setGate] = useState(meta.default_gate)
   const [horizon, setHorizon] = useState(24)
 
-  const rangeError = start > end ? 'Start date must be on or before the end date.' : null
+  const rangeError =
+    start > end
+      ? 'Start date must be on or before the end date.'
+      : daysBetween(start, end) + 1 > meta.max_days
+        ? `Pick at most ${meta.max_days} days (each view is fetched live from Elexon).`
+        : null
   const series = useApi(
-    () =>
+    (signal) =>
       rangeError
         ? Promise.reject(new Error(rangeError))
-        : getSeries(mode === 'gate' ? { start, end, gate } : { start, end, horizon }),
+        : getSeries(mode === 'gate' ? { start, end, gate } : { start, end, horizon }, signal),
     [start, end, mode, gate, horizon],
   )
   const horizons = useApi(
-    () => (rangeError ? Promise.reject(new Error(rangeError)) : getHorizons(start, end)),
+    (signal) => (rangeError ? Promise.reject(new Error(rangeError)) : getHorizons(start, end, signal)),
     [start, end],
   )
   const s = series.data?.stats
@@ -101,11 +106,11 @@ export default function Accuracy({ meta }: { meta: Meta }) {
         <div className="controls">
           <label className="field">
             <span className="label">From</span>
-            <input type="date" min={meta.start} max={meta.end} value={start} onChange={(e) => e.target.value && setStart(e.target.value)} />
+            <input type="date" min={meta.min} max={meta.max} value={start} onChange={(e) => e.target.value && setStart(e.target.value)} />
           </label>
           <label className="field">
             <span className="label">To</span>
-            <input type="date" min={meta.start} max={meta.end} value={end} onChange={(e) => e.target.value && setEnd(e.target.value)} />
+            <input type="date" min={meta.min} max={meta.max} value={end} onChange={(e) => e.target.value && setEnd(e.target.value)} />
           </label>
           <div className="field">
             <span className="label">Compare</span>
@@ -134,7 +139,8 @@ export default function Accuracy({ meta }: { meta: Meta }) {
         </div>
       </div>
 
-      {series.error && <p className="error">{series.error}</p>}
+      {series.error && <p className="error">{series.error} <button className="retry" onClick={series.retry}>Retry</button></p>}
+      {!s && !series.error && <p className="status">Loading live data from Elexon…</p>}
 
       {s && !series.error && (
         <>
