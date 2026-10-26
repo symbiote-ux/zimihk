@@ -27,9 +27,20 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 cd frontend && npm ci && npm run dev                          # UI on :5173, proxies /api → :8000
 ```
 
-**Tests and lint:** `cd backend && ../.venv/bin/pytest -q` and `.venv/bin/ruff check backend`. The tests are offline: Elexon is replaced by a frozen January 2026 fixture. CI runs these, the frontend type-check and build, and a Docker build.
+## Tests
 
-**Regenerate the test fixture:** `python3 backend/fetch_data.py`.
+| Layer | What | Command |
+|---|---|---|
+| Unit (backend) | Forecast selection, no-look-ahead history, metrics (`test_core.py`); Elexon client request windows, hindcast filter, error mapping, with the network faked (`test_elexon.py`) | `cd backend && ../.venv/bin/pytest -q` |
+| API (backend) | FastAPI endpoints with Elexon replaced by a frozen January 2026 fixture: validation (422), Elexon down (502), unexpected error (500), cache headers (`test_app.py`) | (same command) |
+| Integration | Live Elexon API: the real 07:30 gate run, and the full API reproducing the January baseline exactly (`test_integration.py`) | `cd backend && ../.venv/bin/pytest -q -m integration` |
+| Unit (frontend) | Date maths, UK-time formatting under a UTC+14 viewer timezone, number formatting, API error parsing (`src/api.test.ts`) | `cd frontend && npm test` |
+
+Lint: `.venv/bin/ruff check backend`. Type-check: `cd frontend && npm run build`.
+
+## Deploy
+
+`vercel deploy --prod` from the repo root (the project is linked in `.vercel/`). The UI is built from `frontend/`, and `api/index.py` becomes the Python function.
 
 ## Files and directories
 
@@ -43,12 +54,16 @@ backend/
   data/             January 2026 test fixture (gzipped JSON)
   test_core.py      selection + metrics: DST day, cutoff equality, empty sets, look-ahead
   test_app.py       API: validation (422), Elexon down (502), unexpected error (500), caching, history window
+  test_elexon.py    Elexon client with the network faked: request windows, hindcast filter, error mapping
+  test_integration.py  live Elexon tests (pytest -m integration)
+  pytest.ini        marks live tests; skipped by default
 frontend/src/
   App.tsx           shell + tabs
   DayAhead.tsx      Day-ahead brief page
   Accuracy.tsx      Forecast accuracy page
   Chart.tsx         thin ECharts wrapper + shared chart styling
   api.ts            typed API client; useApi hook (wait for inputs to settle, cancel, retry); UK-time formatting
+  api.test.ts       Vitest unit tests
   styles.css        design tokens and layout (light theme)
 api/index.py        Vercel serverless entrypoint (re-exports backend/app.py)
 Dockerfile          multi-stage: node build → python runtime

@@ -128,21 +128,21 @@ backend/
   test_core.py, test_app.py
 frontend/src/     # App, DayAhead, Accuracy, Chart, api.ts, styles.css
 api/index.py      # Vercel entrypoint: re-exports app
-Dockerfile, docker-compose.yml, vercel.json, .github/workflows/ci.yml, README.md
+Dockerfile, docker-compose.yml, vercel.json, README.md
 ```
 
 ### Tech stack
 - **Backend:** Python 3.12, FastAPI + uvicorn. Tooling: pytest, ruff.
 - **Frontend:** React 18, TypeScript, Vite, Apache ECharts (tree-shaken), plain CSS, `Intl` for UK time.
 - **Practices:**
-  - GitHub Actions CI (ruff, pytest, `tsc` + build, Docker build).
+  - Lint (ruff) and type-check (`tsc`) before every deploy.
   - Test-first domain logic.
   - Offline tests.
   - An AI-usage statement in the README.
 
 ## 6. Deployment
 
-**Vercel (free), with Docker for local development and CI.** The brief allows Vercel or Heroku. Vercel builds from source rather than running Docker, so Docker covers "please use docker": `docker compose up` runs the whole stack, and CI builds the image.
+**Vercel (free), with Docker for local development.** The brief allows Vercel or Heroku. Vercel builds from source rather than running Docker, so Docker covers "please use docker": `docker compose up` runs the whole stack, and CI builds the image.
 
 **Why Vercel**
 - It's free, and a pilot shouldn't carry hosting costs.
@@ -162,7 +162,7 @@ Dockerfile, docker-compose.yml, vercel.json, .github/workflows/ci.yml, README.md
 | Requests depend on Elexon | Slow (4–13 s on a cache miss); down when Elexon is down | Parallel fetch, 25 s timeout, clean 502 with Retry in the UI, 25-min edge cache |
 | No cache in Docker | Locally, every request hits Elexon | Local use is low volume; the edge cache only exists in production |
 | Cold starts | +1–2 s after idle | Small dependency set |
-| Production doesn't run the Docker image | Minor difference between environments | Same app and dependencies; CI builds the image |
+| Production doesn't run the Docker image | Minor difference between environments | Same app and dependencies; the image is built and run locally |
 | Traffic passes through to Elexon on cache misses | Heavy, varied traffic multiplies Elexon calls | Fine for a pilot. In production, move to scheduled ingestion (below) |
 
 **Production path:** a scheduled job pulls each new WINDFOR run and FUELHH half-hour into Postgres, and the API reads Postgres. Elexon then receives one call per publish no matter how many users there are, responses take milliseconds, and the app survives Elexon outages. Only `elexon.fetch` would change; the domain logic and its tests stay the same.
@@ -215,7 +215,7 @@ Dockerfile, docker-compose.yml, vercel.json, .github/workflows/ci.yml, README.md
 | 4 | Frontend shell, API client, design system | 1.5 h |
 | 5 | Day-ahead brief page | 2 h |
 | 6 | Accuracy page | 2 h |
-| 7 | Docker, CI, Vercel deploy, incognito check | 1.5 h |
+| 7 | Docker, Vercel deploy, incognito check | 1.5 h |
 | 8 | README, polish | 1 h |
 | 9 | Video | 1.5 h |
 
@@ -232,7 +232,7 @@ Dockerfile, docker-compose.yml, vercel.json, .github/workflows/ci.yml, README.md
 2. Data semantics: hindcast filtering, hourly vs half-hourly join, gate logic, rolling no-look-ahead history.
 3. The pure domain layer and its offline tests.
 4. API, validation and error handling.
-5. CI, Docker and Vercel: why Vercel, and why the CDN is the right cache for serverless.
+5. Docker and Vercel: why Vercel, and why the CDN is the right cache for serverless.
 6. Trade-offs and the production path (scheduled ingestion + Postgres).
 
 **Script for the caching / rate-limit question:**

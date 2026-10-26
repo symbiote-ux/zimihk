@@ -27,7 +27,7 @@ export type HorizonPoint = { h: number; n: number; mae: number | null; bias: num
 export type Meta = { start: string; end: string; min: string; max: string; max_days: number; default_gate: string }
 
 /** FastAPI errors are {detail: string} or, for validation, {detail: [{msg}]}. */
-async function errorMessage(res: Response): Promise<string> {
+export async function errorMessage(res: Response): Promise<string> {
   try {
     const { detail } = await res.json()
     if (typeof detail === 'string') return detail
