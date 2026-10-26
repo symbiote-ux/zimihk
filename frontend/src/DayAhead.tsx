@@ -106,16 +106,6 @@ export default function DayAhead({ meta }: { meta: Meta }) {
                 if (GATE_RE.test(event.target.value)) setGate(event.target.value)
               }} />
           </label>
-          <div className="field">
-            <span className="label">History</span>
-            <div className="segmented" role="group" aria-label="History window">
-              {HISTORY_CHOICES.map((days) => (
-                <button key={days} type="button" aria-pressed={historyDays === days} onClick={() => setHistoryDays(days)}>
-                  {days} days
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
 
@@ -173,16 +163,35 @@ export default function DayAhead({ meta }: { meta: Meta }) {
             </p>
           </section>
 
+          <div className="section-intro">
+            <div>
+              <div className="eyebrow">How reliable is this forecast?</div>
+              <p className="caption">
+                {histOk ? (
+                  <>
+                    Measured on the {hist!.days} settled days before this decision ({fmtDay(hist!.start)} – {fmtDay(hist!.end)}),
+                    using the forecast available at the {gate} gate each day. Error = forecast − actual; positive means
+                    more wind was forecast than arrived. The window also sets the band on the chart above.
+                  </>
+                ) : (
+                  <>No settled history in this window before the decision.</>
+                )}
+              </p>
+            </div>
+            <div className="field">
+              <span className="label">History</span>
+              <div className="segmented" role="group" aria-label="History window">
+                {HISTORY_CHOICES.map((days) => (
+                  <button key={days} type="button" aria-pressed={historyDays === days} onClick={() => setHistoryDays(days)}>
+                    {days} days
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {histOk && (
             <>
-              <div className="section-intro">
-                <div className="eyebrow">How reliable is this forecast?</div>
-                <p className="caption">
-                  Measured on the {hist!.days} settled days before this decision ({fmtDay(hist!.start)} – {fmtDay(hist!.end)}),
-                  using the forecast available at the {gate} gate each day. Error = forecast − actual; positive means
-                  more wind was forecast than arrived.
-                </p>
-              </div>
               <div className="kpis">
                 <Kpi label="MAE" info={INFO["MAE"]} value={gw(hist!.stats.mae, 2)} unit="GW" sub="Typical miss per hour" />
                 <Kpi label="Bias" info={INFO["Bias"]} value={signedGw(bias)} unit="GW" sub={bias! > 0 ? 'Over-forecast' : 'Under-forecast'} over={bias! > 0} />
