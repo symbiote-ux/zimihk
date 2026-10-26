@@ -48,29 +48,41 @@ Lint: `.venv/bin/ruff check backend`. Type-check: `cd frontend && npm run build`
 
 ```
 backend/
-  core.py           pure domain logic: forecast selection at the gate, 30-day no-look-ahead history, metrics and breakdowns
-  elexon.py         Elexon BMRS client: FUELHH + WINDFOR fetched in parallel, 25 s timeout, ElexonError
-  app.py            FastAPI: /api/meta, /api/series; validation, JSON errors, cache headers;
-                    serves the built UI if backend/static exists (Docker)
-  fetch_data.py     regenerates the offline test fixture
-  data/             January 2026 test fixture (gzipped JSON)
-  test_core.py      selection + metrics: DST day, cutoff equality, empty sets, look-ahead
-  test_app.py       API: validation (422), Elexon down (502), unexpected error (500), caching, history window
-  test_elexon.py    Elexon client with the network faked: request windows, hindcast filter, error mapping
+  core.py              pure domain logic: forecast selection at the gate, 30-day no-look-ahead history,
+                       metrics (MAE, RMSE, bias, nMAE, P50/P90/P99) and breakdowns by day, hour and lead time
+  elexon.py            Elexon BMRS client: FUELHH + WINDFOR fetched in parallel, hindcasts dropped,
+                       25 s timeout, ElexonError
+  app.py               FastAPI: /api/meta, /api/series; validation (422), JSON errors (502/500),
+                       25-min CDN cache header; serves the built UI if backend/static exists (Docker)
+  fetch_data.py        regenerates the offline test fixture from Elexon
+  data/                January 2026 test fixture: actuals.json.gz, forecasts.json.gz
+  test_core.py         clock-change days, gate in winter/summer, cutoff equality, hindcast exclusion,
+                       metrics, empty sets, no-look-ahead window, breakdowns grouped in UK time
+  test_app.py          API with Elexon faked: meta, gate run selection, history window fetched once,
+                       history breakdowns, 422 without calling Elexon, 502, 500, cache header
+  test_elexon.py       Elexon client with the network faked: request windows, hindcast filter, error mapping
   test_integration.py  live Elexon tests (pytest -m integration)
-  pytest.ini        marks live tests; skipped by default
-frontend/src/
-  App.tsx           shell
-  DayAhead.tsx      the page: day-ahead brief + forecast reliability
-  Chart.tsx         thin ECharts wrapper + shared chart styling
-  api.ts            typed API client; useApi hook (wait for inputs to settle, cancel, retry); UK-time formatting
-  api.test.ts       Vitest unit tests
-  styles.css        design tokens and layout (light theme)
-api/index.py        Vercel serverless entrypoint (re-exports backend/app.py)
-Dockerfile          multi-stage: node build → python runtime
-docker-compose.yml  one service on :8000
-vercel.json         static UI + Python function for /api/* (60 s max)
-PLAN.md             requirements analysis, domain research, design decisions, trade-offs, video outline
+  pytest.ini           registers the integration marker; live tests skipped by default
+frontend/
+  index.html           page shell, IBM Plex fonts
+  vite.config.ts       dev proxy /api -> :8000; Vitest config
+  package.json         scripts: dev, build, test (runs under UTC+14 to prove UK-time formatting)
+  src/main.tsx         React entry point
+  src/App.tsx          masthead + loads /api/meta, renders the page
+  src/DayAhead.tsx     the page: decision day + gate inputs, day-ahead brief, forecast reliability section
+  src/Chart.tsx        thin ECharts wrapper (tree-shaken) + shared colours and axis styling
+  src/api.ts           typed API client; useApi hook (debounce, cancel, retry); UK-time and GW formatting
+  src/api.test.ts      Vitest unit tests: UK-time formatting, number formatting, error messages
+  src/styles.css       design tokens and layout (light theme, mobile breakpoint)
+api/index.py           Vercel serverless entrypoint (re-exports backend/app.py)
+requirements.txt       runtime: fastapi, uvicorn
+requirements-dev.txt   + pytest, httpx, ruff
+ruff.toml              lint config (line length 120)
+Dockerfile             multi-stage: node build -> python runtime
+docker-compose.yml     one service on :8000
+.dockerignore          keeps node_modules, venvs and build output out of the image
+vercel.json            static UI + Python function for /api/* (60 s max)
+PLAN.md                requirements analysis, domain research, design decisions, trade-offs, video outline
 ```
 
 ## Key definitions
