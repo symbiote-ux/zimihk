@@ -1,12 +1,12 @@
 # Wind Forecast Monitor: Requirements Analysis & Development Plan
 
-> Status: planning only, no code written yet. Target budget is 16 hours or less.
+> Status: v1 built and deployed (https://zimihk.vercel.app). Target budget is 16 hours or less.
 
 ---
 
 ## 1. Context
 
-**The company (REint / GridBricks).** An AI platform for energy decisions covering simulation, forecasting (solar, wind, demand), optimisation and power procurement. It sells to utilities, IPPs, system operators and traders. Its product language is a loop of *Simulate → Predict → Execute → Learn*, plus auditability ("outputs trace back to their runs"). This take-home is a small version of the "Predict + Learn" part: show the forecast a buyer would have acted on, then measure how good it was.
+**The product (Wind Desk).** A decision-support tool for energy buyers. It closes a simple loop: **predict** (show the forecast the buyer could actually act on at decision time) and **learn** (measure how good that forecast turned out to be, and carry the error into the next decision). Every number traces back to a specific forecast run and its publish time, so results are auditable.
 
 **The user.** A UK utility's day-ahead power-purchase desk. Each day (D-1) they buy power for delivery day D before the auction gate closes. Wind is weather-driven, so:
 
@@ -212,6 +212,34 @@ A live version would forecast the next day every day, so it would need fresh dat
 - **Timezone or BST bugs:** handled by storing UTC, displaying Europe/London, and unit-testing a BST date even though January doesn't need it.
 - **Bias hypothesis is wrong:** framed as a hypothesis in the pitch, backed only by the numbers.
 - **Scope creep:** stretch items happen only after M4 (deployed).
+
+## 8b. Value proposition (the "why not just use the Elexon API?" answer)
+
+**Elexon publishes data, while the buyer needs a decision. Wind Desk is the layer in between.**
+
+At 09:15 on decision day, the raw API gives the buyer:
+- About 20 competing forecasts for every hour of tomorrow. There are 8 runs a day, each looking about 2.8 days ahead, and some were published after the gate.
+- Hindcast rows mixed in with real forecasts, all in UTC JSON.
+- Hourly forecasts set against half-hourly actuals, so the two don't line up.
+- No measure of how reliable any of it is.
+
+| Step | Raw Elexon | Wind Desk |
+|---|---|---|
+| 1. Pick the right number | About 20 competing forecasts per hour | The single forecast published before the gate, which the buyer could actually act on |
+| 2. Make it comparable | Hourly vs half-hourly, UTC, hindcasts | Aligned hourly, shown in UK time, hindcasts removed |
+| 3. Score it | Nothing | MAE, bias, P90, error vs lead time |
+| 4. Quantify tomorrow's risk | Nothing | A P10–P90 band from settled days only (no hindsight) |
+| 5. Say what it means | Nothing | "Forecasts run ~1.7 GW high, so buying on the raw number means under-buying" |
+
+**Money line:** a systematic over-forecast means the desk under-buys day-ahead and covers the gap at intraday or imbalance prices, which are usually much more expensive. Nobody spots that pattern by reading JSON.
+
+**Analogy for the pitch:** "The Met Office publishes raw model output; people plan their day with an app that picks the relevant forecast and says '70% chance of rain'. We do that for your day-ahead desk."
+
+**Roadmap (shows the bigger value for the client):**
+1. **Bias-corrected forecast.** This is the quickest win, because the error is systematic.
+2. **Add demand.** Net requirement = demand − wind, which turns the screen into "buy X MWh for hour H".
+3. **Add prices.** Put a £ value on forecast error, e.g. the imbalance cost of last month's bias.
+4. **Better forecasts.** Benchmark our own wind forecast model against Elexon's on the same accuracy page.
 
 ## 9. Video outline
 **Part 1, client pitch (≤5 min):**
