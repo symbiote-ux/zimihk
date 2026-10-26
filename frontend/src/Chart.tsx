@@ -1,5 +1,11 @@
 import { useEffect, useRef } from 'react'
-import * as echarts from 'echarts'
+import * as echarts from 'echarts/core'
+import { BarChart, LineChart } from 'echarts/charts'
+import { DataZoomComponent, GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+import type { EChartsOption } from 'echarts'
+
+echarts.use([BarChart, LineChart, DataZoomComponent, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
 export const C = {
   accent: '#0F4C5C',
@@ -11,7 +17,7 @@ export const C = {
 }
 
 /** Shared axis/text styling so every chart reads as one system. */
-export const base: echarts.EChartsOption = {
+export const base: EChartsOption = {
   textStyle: { fontFamily: 'IBM Plex Sans, system-ui, sans-serif', color: C.muted },
   grid: { left: 56, right: 16, top: 32, bottom: 40 },
   tooltip: {
@@ -31,7 +37,7 @@ export const axis = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 })
 
-export function Chart({ option, height = 320 }: { option: echarts.EChartsOption; height?: number }) {
+export function Chart({ option, height = 320 }: { option: EChartsOption; height?: number }) {
   const el = useRef<HTMLDivElement>(null)
   const chart = useRef<echarts.ECharts>()
 
@@ -46,7 +52,7 @@ export function Chart({ option, height = 320 }: { option: echarts.EChartsOption;
   }, [])
 
   useEffect(() => {
-    chart.current?.setOption({ ...base, ...option }, true)
+    chart.current?.setOption({ ...base, ...option, legend: { ...(base.legend as object), ...(option.legend as object) } }, true)
   }, [option])
 
   return <div ref={el} style={{ height, width: '100%' }} />
