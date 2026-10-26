@@ -159,7 +159,7 @@ export default function Accuracy({ meta }: { meta: Meta }) {
           <div className="kpis">
             <Tile label="MAE" value={gw(s.mae, 2)} unit="GW" sub="Mean absolute error" />
             <Tile label="RMSE" value={gw(s.rmse, 2)} unit="GW" sub="Penalises large misses" />
-            <Tile label="Bias" value={signedGw(s.bias)} unit="GW" sub={over ? 'Over-forecast' : 'Under-forecast'} over={over} />
+            <Tile label="Bias" value={signedGw(s.bias)} unit="GW" sub={s.bias == null ? 'No data' : over ? 'Over-forecast' : 'Under-forecast'} over={over} />
             <Tile label="P90 abs error" value={gw(s.p90, 2)} unit="GW" sub="Exceeded 1 hour in 10" />
             <Tile label="nMAE" value={pct(s.nmae)} unit="%" sub="MAE ÷ mean actual" />
             <Tile label="Coverage" value={pct(s.coverage)} unit="%" sub={`${s.n} of ${rows.length} hours`} />

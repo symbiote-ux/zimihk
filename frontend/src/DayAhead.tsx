@@ -69,7 +69,7 @@ export default function DayAhead({ meta }: { meta: Meta }) {
     }
   }, [rows, histOk, hist])
 
-  const bias = hist?.stats.bias ?? null
+  const bias = histOk ? hist!.stats.bias : null // too few settled days → no verdict, neutral styling
   return (
     <>
       <div className="page-head">
