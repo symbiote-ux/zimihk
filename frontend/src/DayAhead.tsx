@@ -150,12 +150,12 @@ export default function DayAhead({ meta }: { meta: Meta }) {
           </div>
 
           <div className="kpis">
-            <Kpi label="Forecast run used" text value={run ? fmtLondon(run) : 'None before gate'} sub={`Latest publish ≤ ${gate} on ${fmtDay(decision)}`} />
-            <Kpi label="Wind energy, D" value={gw(totalMw, 0)} unit="GWh" sub={`${forecastMw.length} hourly points`} />
-            <Kpi label="Hourly range" value={forecastMw.length ? `${gw(Math.min(...forecastMw))}–${gw(Math.max(...forecastMw))}` : '—'} unit="GW" sub="Forecast min – max" />
-            <Kpi label="Track record" value={histOk ? signedGw(bias) : '—'} unit={histOk ? 'GW bias' : ''}
+            <Kpi label="Forecast run used" info={INFO["Forecast run used"]} text value={run ? fmtLondon(run) : 'None before gate'} sub={`Latest publish ≤ ${gate} on ${fmtDay(decision)}`} />
+            <Kpi label="Wind energy, D" info={INFO["Wind energy, D"]} value={gw(totalMw, 0)} unit="GWh" sub={`${forecastMw.length} hourly points`} />
+            <Kpi label="Hourly range" info={INFO["Hourly range"]} value={forecastMw.length ? `${gw(Math.min(...forecastMw))}–${gw(Math.max(...forecastMw))}` : '—'} unit="GW" sub="Forecast min – max" />
+            <Kpi label="Track record" info={INFO["Track record"]} value={histOk ? signedGw(bias) : '—'} unit={histOk ? 'GW bias' : ''}
               sub={histOk ? `MAE ${gw(hist!.stats.mae, 2)} GW · ${hist!.days} settled days` : 'No history'} over={histOk && bias! > 0} />
-            <Kpi label="Hindsight, D" value={hindsight?.count ? gw(hindsight.mae, 2) : '—'} unit={hindsight?.count ? 'GW MAE' : ''}
+            <Kpi label="Hindsight, D" info={INFO["Hindsight, D"]} value={hindsight?.count ? gw(hindsight.mae, 2) : '—'} unit={hindsight?.count ? 'GW MAE' : ''}
               sub={hindsight?.count ? `Bias ${signedGw(hindsight.bias)} GW · known after delivery` : 'Actuals not yet known'} />
           </div>
 
@@ -184,12 +184,12 @@ export default function DayAhead({ meta }: { meta: Meta }) {
                 </p>
               </div>
               <div className="kpis">
-                <Kpi label="MAE" value={gw(hist!.stats.mae, 2)} unit="GW" sub="Typical miss per hour" />
-                <Kpi label="Bias" value={signedGw(bias)} unit="GW" sub={bias! > 0 ? 'Over-forecast' : 'Under-forecast'} over={bias! > 0} />
-                <Kpi label="P90 abs error" value={gw(hist!.stats.p90, 2)} unit="GW" sub="Exceeded 1 hour in 10" />
-                <Kpi label="RMSE" value={gw(hist!.stats.rmse, 2)} unit="GW" sub="Penalises large misses" />
-                <Kpi label="nMAE" value={pct(hist!.stats.nmae)} unit="%" sub="MAE ÷ mean actual" />
-                <Kpi label="Coverage" value={pct(hist!.stats.coverage)} unit="%" sub={`${hist!.stats.count} hours compared`} />
+                <Kpi label="MAE" info={INFO["MAE"]} value={gw(hist!.stats.mae, 2)} unit="GW" sub="Typical miss per hour" />
+                <Kpi label="Bias" info={INFO["Bias"]} value={signedGw(bias)} unit="GW" sub={bias! > 0 ? 'Over-forecast' : 'Under-forecast'} over={bias! > 0} />
+                <Kpi label="P90 abs error" info={INFO["P90 abs error"]} value={gw(hist!.stats.p90, 2)} unit="GW" sub="Exceeded 1 hour in 10" />
+                <Kpi label="RMSE" info={INFO["RMSE"]} value={gw(hist!.stats.rmse, 2)} unit="GW" sub="Penalises large misses" />
+                <Kpi label="nMAE" info={INFO["nMAE"]} value={pct(hist!.stats.nmae)} unit="%" sub="MAE ÷ mean actual" />
+                <Kpi label="Coverage" info={INFO["Coverage"]} value={pct(hist!.stats.coverage)} unit="%" sub={`${hist!.stats.count} hours compared`} />
               </div>
 
               <section className="section">
@@ -227,6 +227,32 @@ const pct = (ratio: number | null | undefined) => (ratio == null ? '—' : (rati
 const gwAxis = () => axis({ type: 'value', axisLabel: { ...axis().axisLabel, formatter: (mw: number) => gw(mw) } })
 const biasColor = (bias: number) => (bias > 0 ? COLORS.amber : COLORS.accent)
 const HOUR_MS = 3.6e6
+
+/** Plain-language explanations behind each tile's info button. */
+const INFO: Record<string, string> = {
+  "Forecast run used":
+    "Elexon publishes a new national wind forecast about 8 times a day. This is the latest one published before the gate on decision day: the newest number a buyer could actually have acted on. Later runs are ignored, even if they turned out more accurate.",
+  "Wind energy, D":
+    "The 24 hourly forecasts for the delivery day added up. Each hour's power (MW) held for one hour is energy (MWh), so the total is in GWh. It is how much of tomorrow's demand wind is expected to cover; the rest has to be bought.",
+  "Hourly range":
+    "The lowest and highest hourly forecast for the delivery day, in GW (power at a given moment). It shows how much wind output is expected to swing during the day.",
+  "Track record":
+    "The average error (forecast − actual) of this same gate forecast over the history window. Positive means it ran too high, so trusting it means buying too little. The section below breaks it down.",
+  "Hindsight, D":
+    "How wrong this day's forecast turned out once the actuals came in: MAE, with bias below. Not known at decision time; shown only to check the forecast after the fact.",
+  "MAE":
+    "Mean absolute error: each hour's miss, ignoring whether it was too high or too low, averaged. Read it as \"in a typical hour the forecast was off by this much\".",
+  "Bias":
+    "The average error with direction kept (forecast − actual). Positive: the forecast was too high on average, so expect less wind than forecast and buy more. Negative: the opposite. Unlike MAE, misses in opposite directions cancel, so a large bias means the error leans one way.",
+  "P90 abs error":
+    "9 hours in 10 the miss was smaller than this; 1 hour in 10 it was bigger. Use it to size a safety margin for the bad hours, not the average ones.",
+  "RMSE":
+    "Root mean square error: errors are squared before averaging, so big misses count extra. When RMSE is well above MAE, the errors include some large misses rather than steady small ones.",
+  "nMAE":
+    "MAE divided by the average actual wind, as a percentage. It makes calm and windy periods comparable: a 1.8 GW miss matters more when only 5 GW is blowing.",
+  "Coverage":
+    "The share of hours where both a forecast and an actual existed to compare. Below 100% means data was missing, so the other numbers rest on fewer hours.",
+}
 
 /** Accuracy charts for the 30 settled days behind the decision. */
 function useReliabilityCharts(data: SeriesResponse | undefined, run: string | null | undefined) {
@@ -281,12 +307,21 @@ function useReliabilityCharts(data: SeriesResponse | undefined, run: string | nu
   }, [data, run])
 }
 
-function Kpi({ label, value, unit, sub, text, over }: {
-  label: string; value: string; unit?: string; sub?: string; text?: boolean; over?: boolean
+function Kpi({ label, value, unit, sub, text, over, info }: {
+  label: string; value: string; unit?: string; sub?: string; text?: boolean; over?: boolean; info?: string
 }) {
   return (
     <div className="kpi">
-      <div className="label">{label}</div>
+      <div className="label-row">
+        <span className="label">{label}</span>
+        {info && (
+          // native disclosure: click or Enter toggles; a shared name keeps one explanation open at a time
+          <details className="info" {...{ name: 'kpi-info' }}>
+            <summary aria-label={`What does ${label} mean?`}>i</summary>
+            <p>{info}</p>
+          </details>
+        )}
+      </div>
       <div className={`value${text ? ' text' : ''}${over ? ' over' : ''}`}>
         {value}
         {unit && <small>{unit}</small>}
