@@ -20,8 +20,8 @@ DEFAULT_GATE = time(9, 20)  # EPEX GB day-ahead gate closure, UK time, on D-1
 Run = tuple[datetime, float]  # (publish time, forecast MW)
 
 
-def _ts(s: str) -> datetime:
-    return datetime.fromisoformat(s).astimezone(UTC)
+def _parse_utc(text: str) -> datetime:
+    return datetime.fromisoformat(text).astimezone(UTC)
 
 
 @dataclass(frozen=True)
@@ -32,7 +32,7 @@ class Data:
 
 @dataclass(frozen=True)
 class Row:
-    t: datetime
+    time: datetime
     actual: float | None
     forecast: float | None
     publish: datetime | None
@@ -40,48 +40,51 @@ class Row:
 
 def load(actual_rows: list[list], forecast_rows: list[list]) -> Data:
     runs: dict[datetime, list[Run]] = {}
-    for publish, start, gen in forecast_rows:
-        runs.setdefault(_ts(start), []).append((_ts(publish), gen))
-    for lst in runs.values():
-        lst.sort()
-    return Data({_ts(s): g for s, g in actual_rows}, runs)
+    for publish, start, mw in forecast_rows:
+        runs.setdefault(_parse_utc(start), []).append((_parse_utc(publish), mw))
+    for target_runs in runs.values():
+        target_runs.sort()
+    return Data({_parse_utc(start): mw for start, mw in actual_rows}, runs)
 
 
-def _local_midnight(d: date) -> datetime:
-    return datetime.combine(d, time(), LONDON).astimezone(UTC)
+def _local_midnight(day: date) -> datetime:
+    return datetime.combine(day, time(), LONDON).astimezone(UTC)
 
 
 def targets(start: date, end: date) -> list[datetime]:
     """Every UTC hour whose London-local date is in [start, end] (23 or 25 on clock-change days)."""
-    t, stop = _local_midnight(start), _local_midnight(end + timedelta(days=1))
-    out = []
-    while t < stop:
-        out.append(t)
-        t += timedelta(hours=1)
-    return out
+    hour, stop = _local_midnight(start), _local_midnight(end + timedelta(days=1))
+    hours = []
+    while hour < stop:
+        hours.append(hour)
+        hour += timedelta(hours=1)
+    return hours
 
 
 def gate_cutoff(target: datetime, gate: time) -> datetime:
-    d = target.astimezone(LONDON).date() - timedelta(days=1)
-    return datetime.combine(d, gate, LONDON).astimezone(UTC)
+    decision_day = target.astimezone(LONDON).date() - timedelta(days=1)
+    return datetime.combine(decision_day, gate, LONDON).astimezone(UTC)
 
 
 def pick(runs: list[Run], cutoff: datetime, target: datetime) -> Run | None:
     """Latest run published at/before the cutoff and strictly before the target."""
     best = None
-    for publish, gen in runs:  # sorted by publish, so the first miss ends the scan
+    for publish, mw in runs:  # sorted by publish, so the first miss ends the scan
         if publish > cutoff or publish >= target:
             break
-        best = (publish, gen)
+        best = (publish, mw)
     return best
 
 
 def series(data: Data, start: date, end: date, gate: time | None = None, horizon: int | None = None) -> list[Row]:
     rows = []
-    for t in targets(start, end):
-        cutoff = t - timedelta(hours=horizon) if horizon is not None else gate_cutoff(t, gate or DEFAULT_GATE)
-        hit = pick(data.runs.get(t, []), cutoff, t)
-        rows.append(Row(t, data.actuals.get(t), hit and hit[1], hit and hit[0]))
+    for target in targets(start, end):
+        if horizon is not None:
+            cutoff = target - timedelta(hours=horizon)
+        else:
+            cutoff = gate_cutoff(target, gate or DEFAULT_GATE)
+        run = pick(data.runs.get(target, []), cutoff, target)
+        rows.append(Row(target, data.actuals.get(target), run and run[1], run and run[0]))
     return rows
 
 
@@ -97,56 +100,64 @@ def latest_delivery() -> date:
 
 
 def _errors(rows: list[Row]) -> list[tuple[Row, float]]:
-    return [(r, r.forecast - r.actual) for r in rows if r.forecast is not None and r.actual is not None]
+    return [(row, row.forecast - row.actual) for row in rows if row.forecast is not None and row.actual is not None]
 
 
-def _q(sorted_vals: list[float], p: float) -> float:
-    return sorted_vals[min(len(sorted_vals) - 1, int(p * len(sorted_vals)))]  # nearest rank
+def _quantile(sorted_vals: list[float], fraction: float) -> float:
+    return sorted_vals[min(len(sorted_vals) - 1, int(fraction * len(sorted_vals)))]  # nearest rank
 
 
 def stats(rows: list[Row]) -> dict:
     pairs = _errors(rows)
-    n = len(pairs)
-    out = {"n": n, "coverage": n / len(rows) if rows else 0}
-    if not n:
+    count = len(pairs)
+    out = {"count": count, "coverage": count / len(rows) if rows else 0}
+    if not count:
         return out | dict.fromkeys(["mae", "rmse", "bias", "nmae", "p50", "p90", "p99", "err_p10", "err_p90"])
-    errs = sorted(e for _, e in pairs)
-    abs_errs = sorted(abs(e) for e in errs)
+    errs = sorted(err for _, err in pairs)
+    abs_errs = sorted(abs(err) for err in errs)
     mae = fmean(abs_errs)
-    mean_actual = fmean(r.actual for r, _ in pairs)
+    mean_actual = fmean(row.actual for row, _ in pairs)
     return out | {
         "mae": mae,
-        "rmse": math.sqrt(fmean(e * e for e in errs)),
+        "rmse": math.sqrt(fmean(err * err for err in errs)),
         "bias": fmean(errs),
         "nmae": mae / mean_actual if mean_actual else None,
-        "p50": _q(abs_errs, 0.5),
-        "p90": _q(abs_errs, 0.9),
-        "p99": _q(abs_errs, 0.99),
-        "err_p10": _q(errs, 0.1),
-        "err_p90": _q(errs, 0.9),
+        "p50": _quantile(abs_errs, 0.5),
+        "p90": _quantile(abs_errs, 0.9),
+        "p99": _quantile(abs_errs, 0.99),
+        "err_p10": _quantile(errs, 0.1),
+        "err_p90": _quantile(errs, 0.9),
     }
 
 
 def _group(rows: list[Row], key: str, of) -> list[dict]:
     buckets: dict = {}
-    for r, e in _errors(rows):
-        buckets.setdefault(of(r.t.astimezone(LONDON)), []).append(e)
-    return [{key: k, "n": len(es), "mae": fmean(map(abs, es)), "bias": fmean(es)} for k, es in sorted(buckets.items())]
+    for row, err in _errors(rows):
+        buckets.setdefault(of(row.time.astimezone(LONDON)), []).append(err)
+    return [
+        {key: bucket, "count": len(errs), "mae": fmean(map(abs, errs)), "bias": fmean(errs)}
+        for bucket, errs in sorted(buckets.items())
+    ]
 
 
 def by_hour(rows: list[Row]) -> list[dict]:
-    return _group(rows, "hour", lambda t: t.hour)
+    return _group(rows, "hour", lambda local: local.hour)
 
 
 def by_day(rows: list[Row]) -> list[dict]:
     """Per delivery day (London date): how wrong was the forecast that day."""
-    return _group(rows, "day", lambda t: t.date().isoformat())
-
+    return _group(rows, "day", lambda local: local.date().isoformat())
 
 
 def by_horizon(data: Data, start: date, end: date, horizons=range(0, 49, 3)) -> list[dict]:
     out = []
-    for h in horizons:
-        s = stats(series(data, start, end, horizon=h))
-        out.append({"h": h, "n": s["n"], "mae": s["mae"], "bias": s["bias"], "p90": s["p90"]})
+    for hours_ahead in horizons:
+        scored = stats(series(data, start, end, horizon=hours_ahead))
+        out.append({
+            "hours_ahead": hours_ahead,
+            "count": scored["count"],
+            "mae": scored["mae"],
+            "bias": scored["bias"],
+            "p90": scored["p90"],
+        })
     return out

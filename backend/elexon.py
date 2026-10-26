@@ -19,10 +19,10 @@ class ElexonError(Exception):
 
 def get(dataset: str, **params: str) -> list[dict]:
     try:
-        with urlopen(BASE.format(dataset) + urlencode(params), timeout=TIMEOUT) as r:
-            return json.load(r)
-    except (URLError, TimeoutError, ValueError) as e:  # HTTPError is a URLError; bad JSON is a ValueError
-        raise ElexonError(f"{dataset}: {e}") from e
+        with urlopen(BASE.format(dataset) + urlencode(params), timeout=TIMEOUT) as response:
+            return json.load(response)
+    except (URLError, TimeoutError, ValueError) as err:  # HTTPError is a URLError; bad JSON is a ValueError
+        raise ElexonError(f"{dataset}: {err}") from err
 
 
 def fetch(first: date, last: date) -> core.Data:
@@ -36,9 +36,13 @@ def fetch(first: date, last: date) -> core.Data:
             publishDateTimeFrom=f"{first - timedelta(days=3)}T00:00:00Z",  # runs reach ~66 h ahead
             publishDateTimeTo=f"{last + timedelta(days=1)}T00:00:00Z",
         )
-        a, f = actuals.result(), forecasts.result()
+        actual_rows, forecast_rows = actuals.result(), forecasts.result()
     return core.load(
-        [[r["startTime"], r["generation"]] for r in a],
+        [[row["startTime"], row["generation"]] for row in actual_rows],
         # startTime <= publishTime rows are hindcasts, not forecasts
-        [[r["publishTime"], r["startTime"], r["generation"]] for r in f if r["startTime"] > r["publishTime"]],
+        [
+            [row["publishTime"], row["startTime"], row["generation"]]
+            for row in forecast_rows
+            if row["startTime"] > row["publishTime"]
+        ],
     )

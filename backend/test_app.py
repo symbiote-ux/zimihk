@@ -12,8 +12,8 @@ import elexon
 
 
 def _read(name: str) -> list:
-    with gzip.open(Path(__file__).parent / "data" / name, "rt") as f:
-        return json.load(f)
+    with gzip.open(Path(__file__).parent / "data" / name, "rt") as fixture:
+        return json.load(fixture)
 
 
 # January 2026 snapshot stands in for Elexon so tests never touch the network.
@@ -32,24 +32,24 @@ def offline(monkeypatch):
     monkeypatch.setattr(appmod.elexon, "fetch", fake)
 
 
-c = TestClient(appmod.app, raise_server_exceptions=False)
+client = TestClient(appmod.app, raise_server_exceptions=False)
 FULL = {"start": "2026-01-02", "end": "2026-02-01"}
 
 
-def day(d: str, **kw) -> dict:
-    return c.get("/api/series", params={"start": d, "end": d, **kw}).json()
+def day(delivery: str, **params) -> dict:
+    return client.get("/api/series", params={"start": delivery, "end": delivery, **params}).json()
 
 
 def test_meta():
-    m = c.get("/api/meta").json()
-    assert (m["start"], m["end"], m["default_gate"]) == ("2026-01-02", "2026-02-01", "09:20")
-    assert (m["min"], m["max"]) == ("2023-01-01", core.latest_delivery().isoformat())
+    meta = client.get("/api/meta").json()
+    assert (meta["start"], meta["end"], meta["default_gate"]) == ("2026-01-02", "2026-02-01", "09:20")
+    assert (meta["min"], meta["max"]) == ("2023-01-01", core.latest_delivery().isoformat())
 
 
 def test_series_one_day_gate():
-    r = day("2026-01-15")
-    assert len(r["rows"]) == 24 and r["stats"]["n"] == 24
-    assert all(row["publish"].startswith("2026-01-14T07:30") for row in r["rows"])
+    result = day("2026-01-15")
+    assert len(result["rows"]) == 24 and result["stats"]["count"] == 24
+    assert all(row["publish"].startswith("2026-01-14T07:30") for row in result["rows"])
 
 
 def test_series_custom_gate_uses_later_run():
@@ -57,18 +57,18 @@ def test_series_custom_gate_uses_later_run():
 
 
 def test_series_history_is_last_30_settled_days_and_fetched_once():
-    h = day("2026-01-16")["history"]
-    assert (h["start"], h["end"], h["days"]) == ("2025-12-16", "2026-01-14", 30)
-    assert h["stats"]["n"] > 0
+    history = day("2026-01-16")["history"]
+    assert (history["start"], history["end"], history["days"]) == ("2025-12-16", "2026-01-14", 30)
+    assert history["stats"]["count"] > 0
     assert calls == [(date(2025, 12, 16), date(2026, 1, 16))]
 
 
 def test_history_carries_the_accuracy_breakdowns():
-    h = day("2026-02-01")["history"]  # D-31..D-2 = 1-30 Jan, all inside the fixture
-    assert (h["start"], h["end"]) == ("2026-01-01", "2026-01-30")
-    assert len(h["by_day"]) == 30 and h["by_day"][0]["day"] == "2026-01-01"
-    assert len(h["by_hour"]) == 24
-    assert [x["h"] for x in h["by_horizon"]] == list(range(0, 49, 3))
+    history = day("2026-02-01")["history"]  # D-31..D-2 = 1-30 Jan, all inside the fixture
+    assert (history["start"], history["end"]) == ("2026-01-01", "2026-01-30")
+    assert len(history["by_day"]) == 30 and history["by_day"][0]["day"] == "2026-01-01"
+    assert len(history["by_hour"]) == 24
+    assert [entry["hours_ahead"] for entry in history["by_horizon"]] == list(range(0, 49, 3))
 
 
 @pytest.mark.parametrize("params", [
@@ -79,7 +79,7 @@ def test_history_carries_the_accuracy_breakdowns():
     {"start": "2026-01-02", "end": "2026-01-02", "gate": "25:00"},
 ])
 def test_bad_params_422_without_calling_elexon(params):
-    assert c.get("/api/series", params=params).status_code == 422
+    assert client.get("/api/series", params=params).status_code == 422
     assert calls == []
 
 
@@ -88,9 +88,9 @@ def test_elexon_down_is_502_json(monkeypatch):
         raise elexon.ElexonError("timeout")
 
     monkeypatch.setattr(appmod.elexon, "fetch", down)
-    r = c.get("/api/series", params=FULL)
-    assert r.status_code == 502 and "Elexon" in r.json()["detail"]
-    assert "s-maxage" not in r.headers.get("cache-control", "")
+    response = client.get("/api/series", params=FULL)
+    assert response.status_code == 502 and "Elexon" in response.json()["detail"]
+    assert "s-maxage" not in response.headers.get("cache-control", "")
 
 
 def test_unexpected_error_is_500_json(monkeypatch):
@@ -98,10 +98,10 @@ def test_unexpected_error_is_500_json(monkeypatch):
         raise RuntimeError("bug")
 
     monkeypatch.setattr(appmod.elexon, "fetch", boom)
-    r = c.get("/api/series", params=FULL)
-    assert r.status_code == 500 and r.json() == {"detail": "Internal server error"}
-    assert "s-maxage" not in r.headers.get("cache-control", "")
+    response = client.get("/api/series", params=FULL)
+    assert response.status_code == 500 and response.json() == {"detail": "Internal server error"}
+    assert "s-maxage" not in response.headers.get("cache-control", "")
 
 
 def test_success_cached_25_min_at_cdn():
-    assert "s-maxage=1500" in c.get("/api/series", params=FULL).headers["cache-control"]
+    assert "s-maxage=1500" in client.get("/api/series", params=FULL).headers["cache-control"]

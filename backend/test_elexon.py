@@ -30,7 +30,7 @@ def test_fetch_asks_for_the_right_windows_and_drops_hindcasts(monkeypatch):
         "publishDateTimeFrom": "2026-01-12T00:00:00Z",
         "publishDateTimeTo": "2026-01-16T00:00:00Z",
     }
-    assert [gen for runs in data.runs.values() for _, gen in runs] == [1000]
+    assert [mw for runs in data.runs.values() for _, mw in runs] == [1000]
     assert list(data.actuals.values()) == [900]
 
 

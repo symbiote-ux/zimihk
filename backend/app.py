@@ -19,13 +19,13 @@ app = FastAPI(title="Wind Desk API")
 
 
 @app.exception_handler(elexon.ElexonError)
-async def elexon_unavailable(_: Request, e: elexon.ElexonError) -> JSONResponse:
-    log.warning("Elexon unavailable: %s", e)
+async def elexon_unavailable(_: Request, err: elexon.ElexonError) -> JSONResponse:
+    log.warning("Elexon unavailable: %s", err)
     return JSONResponse({"detail": "Elexon BMRS is unavailable or slow right now. Please retry shortly."}, 502)
 
 
 @app.exception_handler(Exception)
-async def unexpected(_: Request, e: Exception) -> JSONResponse:
+async def unexpected(_: Request, _err: Exception) -> JSONResponse:
     log.exception("Unhandled error")
     return JSONResponse({"detail": "Internal server error"}, 500)
 
@@ -46,21 +46,21 @@ def _check_range(start: date, end: date) -> None:
         raise HTTPException(422, f"At most {core.MAX_DAYS} delivery days per request")
 
 
-def _row(r: core.Row) -> dict:
+def _row(row: core.Row) -> dict:
     return {
-        "t": r.t.isoformat(),
-        "actual": r.actual,
-        "forecast": r.forecast,
-        "publish": r.publish and r.publish.isoformat(),
+        "time": row.time.isoformat(),
+        "actual": row.actual,
+        "forecast": row.forecast,
+        "publish": row.publish and row.publish.isoformat(),
     }
 
 
 @app.get("/api/meta")
 def meta() -> dict:
-    lo, hi = core.PILOT
+    pilot_start, pilot_end = core.PILOT
     return {
-        "start": lo.isoformat(),
-        "end": hi.isoformat(),
+        "start": pilot_start.isoformat(),
+        "end": pilot_end.isoformat(),
         "min": core.EARLIEST.isoformat(),
         "max": core.latest_delivery().isoformat(),
         "default_gate": core.DEFAULT_GATE.strftime("%H:%M"),
@@ -74,22 +74,22 @@ def series(
     gate: str = Query("09:20", pattern=r"^([01]\d|2[0-3]):[0-5]\d$"),
 ) -> dict:
     _check_range(start, end)
-    g = time.fromisoformat(gate)
-    hist = core.history_range(start)
-    data = elexon.fetch(hist[0], end)  # one Elexon pull covers both the history and the selection
-    rows = core.series(data, start, end, gate=g)
-    past = core.series(data, *hist, gate=g)
+    gate_time = time.fromisoformat(gate)
+    hist_start, hist_end = core.history_range(start)
+    data = elexon.fetch(hist_start, end)  # one Elexon pull covers both the history and the selection
+    rows = core.series(data, start, end, gate=gate_time)
+    past = core.series(data, hist_start, hist_end, gate=gate_time)
     return {
-        "rows": [_row(r) for r in rows],
+        "rows": [_row(row) for row in rows],
         "stats": core.stats(rows),  # hindsight: known only after delivery
         "history": {  # the quantified error available at decision time
-            "start": hist[0].isoformat(),
-            "end": hist[1].isoformat(),
+            "start": hist_start.isoformat(),
+            "end": hist_end.isoformat(),
             "days": core.HISTORY_DAYS,
             "stats": core.stats(past),
             "by_day": core.by_day(past),
             "by_hour": core.by_hour(past),
-            "by_horizon": core.by_horizon(data, *hist),
+            "by_horizon": core.by_horizon(data, hist_start, hist_end),
         },
     }
 

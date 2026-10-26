@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { EChartsOption } from 'echarts'
 import { addDays, fmtDay, fmtHour, fmtLondon, getSeries, gw, signedGw, useApi, type Meta, type SeriesResponse } from './api'
-import { C, Chart, axis } from './Chart'
+import { COLORS, Chart, axis } from './Chart'
 
 const GATE_RE = /^([01]\d|2[0-3]):[0-5]\d$/
 
@@ -18,54 +18,55 @@ export default function DayAhead({ meta }: { meta: Meta }) {
   )
 
   const rows = data?.rows ?? []
-  const fc = rows.flatMap((r) => (r.forecast == null ? [] : [r.forecast]))
-  const run = rows.find((r) => r.publish)?.publish
+  const forecastMw = rows.flatMap((row) => (row.forecast == null ? [] : [row.forecast]))
+  const totalMw = forecastMw.reduce((sum, mw) => sum + mw, 0)
+  const run = rows.find((row) => row.publish)?.publish
   const hist = data?.history
-  const histOk = !!hist && hist.stats.n > 0
-  const day = data?.stats
+  const histOk = !!hist && hist.stats.count > 0
+  const hindsight = data?.stats
 
   const option = useMemo<EChartsOption>(() => {
     // Band = forecast − err_p90 … forecast − err_p10, floored at 0 (generation can't be negative).
-    const band = (r: (typeof rows)[number]) => {
-      if (!histOk || r.forecast == null) return null
-      const lo = Math.max(0, r.forecast - hist!.stats.err_p90!)
-      return { lo, hi: Math.max(lo, r.forecast - hist!.stats.err_p10!) }
+    const band = (row: (typeof rows)[number]) => {
+      if (!histOk || row.forecast == null) return null
+      const lo = Math.max(0, row.forecast - hist!.stats.err_p90!)
+      return { lo, hi: Math.max(lo, row.forecast - hist!.stats.err_p10!) }
     }
     return {
       legend: { data: ['Forecast at gate', 'Actual (hindsight)', ...(histOk ? ['P10–P90 range'] : [])] },
       tooltip: {
         trigger: 'axis',
-        formatter: (ps: any) => {
-          const r = rows[ps[0].dataIndex]
-          const parts = [`<b>${fmtHour(r.t)}</b>`]
-          if (r.forecast != null) parts.push(`Forecast ${gw(r.forecast, 2)} GW`)
-          const b = band(r)
-          if (b) parts.push(`Range ${gw(b.lo, 2)}–${gw(b.hi, 2)} GW`)
-          if (r.actual != null) parts.push(`Actual ${gw(r.actual, 2)} GW`)
+        formatter: (points: any) => {
+          const row = rows[points[0].dataIndex]
+          const parts = [`<b>${fmtHour(row.time)}</b>`]
+          if (row.forecast != null) parts.push(`Forecast ${gw(row.forecast, 2)} GW`)
+          const range = band(row)
+          if (range) parts.push(`Range ${gw(range.lo, 2)}–${gw(range.hi, 2)} GW`)
+          if (row.actual != null) parts.push(`Actual ${gw(row.actual, 2)} GW`)
           return parts.join('<br/>')
         },
       },
-      xAxis: axis({ type: 'category', boundaryGap: false, data: rows.map((r) => fmtHour(r.t)), splitLine: { show: false } }),
+      xAxis: axis({ type: 'category', boundaryGap: false, data: rows.map((row) => fmtHour(row.time)), splitLine: { show: false } }),
       yAxis: axis({ type: 'value' }),
       series: [
         ...(histOk
           ? [
               // stackStrategy 'all': default 'samesign' won't stack a width onto a base at/below 0
-              { name: 'band-base', type: 'line', stack: 'band', stackStrategy: 'all', data: rows.map((r) => band(r)?.lo ?? null), symbol: 'none', lineStyle: { opacity: 0 }, silent: true },
+              { name: 'band-base', type: 'line', stack: 'band', stackStrategy: 'all', data: rows.map((row) => band(row)?.lo ?? null), symbol: 'none', lineStyle: { opacity: 0 }, silent: true },
               {
                 name: 'P10–P90 range', type: 'line', stack: 'band', stackStrategy: 'all', symbol: 'none', silent: true,
-                data: rows.map((r) => { const b = band(r); return b ? b.hi - b.lo : null }),
-                lineStyle: { opacity: 0 }, areaStyle: { color: C.band }, itemStyle: { color: 'rgba(15, 76, 92, 0.35)' },
+                data: rows.map((row) => { const range = band(row); return range ? range.hi - range.lo : null }),
+                lineStyle: { opacity: 0 }, areaStyle: { color: COLORS.band }, itemStyle: { color: 'rgba(15, 76, 92, 0.35)' },
               },
             ]
           : []),
         {
-          name: 'Forecast at gate', type: 'line', data: rows.map((r) => r.forecast), symbol: 'none',
-          lineStyle: { color: C.accent, width: 2 }, itemStyle: { color: C.accent },
+          name: 'Forecast at gate', type: 'line', data: rows.map((row) => row.forecast), symbol: 'none',
+          lineStyle: { color: COLORS.accent, width: 2 }, itemStyle: { color: COLORS.accent },
         },
         {
-          name: 'Actual (hindsight)', type: 'line', data: rows.map((r) => r.actual), symbol: 'none',
-          lineStyle: { color: C.ink, width: 1.25, type: 'dashed' }, itemStyle: { color: C.ink },
+          name: 'Actual (hindsight)', type: 'line', data: rows.map((row) => row.actual), symbol: 'none',
+          lineStyle: { color: COLORS.ink, width: 1.25, type: 'dashed' }, itemStyle: { color: COLORS.ink },
         },
       ] as EChartsOption['series'],
     }
@@ -93,14 +94,14 @@ export default function DayAhead({ meta }: { meta: Meta }) {
           <label className="field">
             <span className="label">Decision day</span>
             <input type="date" min={addDays(meta.min, -1)} max={addDays(meta.max, -1)} value={decision}
-              onChange={(e) => e.target.value && setDecision(e.target.value)} />
+              onChange={(event) => event.target.value && setDecision(event.target.value)} />
           </label>
           <label className="field">
             <span className="label">Gate (UK time)</span>
             <input type="time" step={60} value={gateInput}
-              onChange={(e) => {
-                setGateInput(e.target.value)
-                if (GATE_RE.test(e.target.value)) setGate(e.target.value)
+              onChange={(event) => {
+                setGateInput(event.target.value)
+                if (GATE_RE.test(event.target.value)) setGate(event.target.value)
               }} />
           </label>
         </div>
@@ -112,11 +113,11 @@ export default function DayAhead({ meta }: { meta: Meta }) {
       {data && (
         <>
           <div className={`callout${bias != null && bias > 0 ? '' : ' neutral'}`}>
-            {fc.length ? (
+            {forecastMw.length ? (
               <p>
                 The last forecast before the {gate} gate expects{' '}
-                <span className="num">{gw(fc.reduce((a, b) => a + b, 0), 0)} GWh</span> of wind for {fmtDay(delivery)}, between{' '}
-                <span className="num">{gw(Math.min(...fc))}</span> and <span className="num">{gw(Math.max(...fc))} GW</span>.
+                <span className="num">{gw(totalMw, 0)} GWh</span> of wind for {fmtDay(delivery)}, between{' '}
+                <span className="num">{gw(Math.min(...forecastMw))}</span> and <span className="num">{gw(Math.max(...forecastMw))} GW</span>.
               </p>
             ) : (
               <p>No forecast was published before the {gate} gate for {fmtDay(delivery)}.</p>
@@ -138,12 +139,12 @@ export default function DayAhead({ meta }: { meta: Meta }) {
 
           <div className="kpis">
             <Kpi label="Forecast run used" text value={run ? fmtLondon(run) : 'None before gate'} sub={`Latest publish ≤ ${gate} on ${fmtDay(decision)}`} />
-            <Kpi label="Wind energy, D" value={gw(fc.reduce((a, b) => a + b, 0), 0)} unit="GWh" sub={`${fc.length} hourly points`} />
-            <Kpi label="Hourly range" value={fc.length ? `${gw(Math.min(...fc))}–${gw(Math.max(...fc))}` : '—'} unit="GW" sub="Forecast min – max" />
+            <Kpi label="Wind energy, D" value={gw(totalMw, 0)} unit="GWh" sub={`${forecastMw.length} hourly points`} />
+            <Kpi label="Hourly range" value={forecastMw.length ? `${gw(Math.min(...forecastMw))}–${gw(Math.max(...forecastMw))}` : '—'} unit="GW" sub="Forecast min – max" />
             <Kpi label="Track record" value={histOk ? signedGw(bias) : '—'} unit={histOk ? 'GW bias' : ''}
               sub={histOk ? `MAE ${gw(hist!.stats.mae, 2)} GW · ${hist!.days} settled days` : 'No history'} over={histOk && bias! > 0} />
-            <Kpi label="Hindsight, D" value={day?.n ? gw(day.mae, 2) : '—'} unit={day?.n ? 'GW MAE' : ''}
-              sub={day?.n ? `Bias ${signedGw(day.bias)} GW · known after delivery` : 'Actuals not yet known'} />
+            <Kpi label="Hindsight, D" value={hindsight?.count ? gw(hindsight.mae, 2) : '—'} unit={hindsight?.count ? 'GW MAE' : ''}
+              sub={hindsight?.count ? `Bias ${signedGw(hindsight.bias)} GW · known after delivery` : 'Actuals not yet known'} />
           </div>
 
           <section className="section">
@@ -176,7 +177,7 @@ export default function DayAhead({ meta }: { meta: Meta }) {
                 <Kpi label="P90 abs error" value={gw(hist!.stats.p90, 2)} unit="GW" sub="Exceeded 1 hour in 10" />
                 <Kpi label="RMSE" value={gw(hist!.stats.rmse, 2)} unit="GW" sub="Penalises large misses" />
                 <Kpi label="nMAE" value={pct(hist!.stats.nmae)} unit="%" sub="MAE ÷ mean actual" />
-                <Kpi label="Coverage" value={pct(hist!.stats.coverage)} unit="%" sub={`${hist!.stats.n} hours compared`} />
+                <Kpi label="Coverage" value={pct(hist!.stats.coverage)} unit="%" sub={`${hist!.stats.count} hours compared`} />
               </div>
 
               <section className="section">
@@ -209,73 +210,76 @@ export default function DayAhead({ meta }: { meta: Meta }) {
   )
 }
 
-const gwFmt = (v: unknown) => (typeof v === 'number' ? `${gw(v, 2)} GW` : '—')
-const pct = (v: number | null | undefined) => (v == null ? '—' : (v * 100).toFixed(1))
-const gwAxis = () => axis({ type: 'value', axisLabel: { ...axis().axisLabel, formatter: (v: number) => gw(v) } })
-const biasColor = (v: number) => (v > 0 ? C.amber : C.accent)
+const gwFmt = (value: unknown) => (typeof value === 'number' ? `${gw(value, 2)} GW` : '—')
+const pct = (ratio: number | null | undefined) => (ratio == null ? '—' : (ratio * 100).toFixed(1))
+const gwAxis = () => axis({ type: 'value', axisLabel: { ...axis().axisLabel, formatter: (mw: number) => gw(mw) } })
+const biasColor = (bias: number) => (bias > 0 ? COLORS.amber : COLORS.accent)
+const HOUR_MS = 3.6e6
 
 /** Accuracy charts for the 30 settled days behind the decision. */
 function useReliabilityCharts(data: SeriesResponse | undefined, run: string | null | undefined) {
   return useMemo(() => {
-    const h = data?.history
-    const days = h?.by_day ?? []
-    const hours = h?.by_hour ?? []
-    const leads = h?.by_horizon ?? []
+    const history = data?.history
+    const days = history?.by_day ?? []
+    const hours = history?.by_hour ?? []
+    const leads = history?.by_horizon ?? []
 
     // Lead times behind this decision: from the run used to the first/last delivery hour, snapped to the 3 h grid.
-    const ts = (data?.rows ?? []).map((r) => Date.parse(r.t))
-    const span = run && ts.length
-      ? [(Math.min(...ts) - Date.parse(run)) / 3.6e6, (Math.max(...ts) - Date.parse(run)) / 3.6e6]
+    const deliveryTimes = (data?.rows ?? []).map((row) => Date.parse(row.time))
+    const span = run && deliveryTimes.length
+      ? [(Math.min(...deliveryTimes) - Date.parse(run)) / HOUR_MS, (Math.max(...deliveryTimes) - Date.parse(run)) / HOUR_MS]
       : null
-    const snap = (x: number, f: (n: number) => number) => `${Math.min(48, f(x / 3) * 3)}h`
+    const snap = (hoursAhead: number, round: (value: number) => number) => `${Math.min(48, round(hoursAhead / 3) * 3)}h`
 
     const daily: EChartsOption = {
       legend: { data: ['Bias', 'MAE'] },
       xAxis: axis({
-        type: 'category', data: days.map((d) => d.day),
-        axisLabel: { ...axis().axisLabel, formatter: (v: string) => fmtDay(v).split(' ').slice(1).join(' ') },
+        type: 'category', data: days.map((entry) => entry.day),
+        axisLabel: { ...axis().axisLabel, formatter: (day: string) => fmtDay(day).split(' ').slice(1).join(' ') },
         splitLine: { show: false },
       }),
       yAxis: gwAxis(),
       series: [
-        { name: 'Bias', type: 'bar', data: days.map((d) => ({ value: d.bias, itemStyle: { color: biasColor(d.bias) } })), itemStyle: { color: C.amber }, barCategoryGap: '25%', tooltip: { valueFormatter: gwFmt } },
-        { name: 'MAE', type: 'line', data: days.map((d) => d.mae), symbolSize: 4, lineStyle: { color: C.ink, width: 1.25 }, itemStyle: { color: C.ink }, tooltip: { valueFormatter: gwFmt } },
+        { name: 'Bias', type: 'bar', data: days.map((entry) => ({ value: entry.bias, itemStyle: { color: biasColor(entry.bias) } })), itemStyle: { color: COLORS.amber }, barCategoryGap: '25%', tooltip: { valueFormatter: gwFmt } },
+        { name: 'MAE', type: 'line', data: days.map((entry) => entry.mae), symbolSize: 4, lineStyle: { color: COLORS.ink, width: 1.25 }, itemStyle: { color: COLORS.ink }, tooltip: { valueFormatter: gwFmt } },
       ],
     }
     const hourly: EChartsOption = {
       legend: { data: ['MAE', 'Bias'] },
-      xAxis: axis({ type: 'category', data: hours.map((x) => String(x.hour).padStart(2, '0')), name: 'Hour (UK)', nameLocation: 'middle', nameGap: 28, splitLine: { show: false } }),
+      xAxis: axis({ type: 'category', data: hours.map((entry) => String(entry.hour).padStart(2, '0')), name: 'Hour (UK)', nameLocation: 'middle', nameGap: 28, splitLine: { show: false } }),
       yAxis: gwAxis(),
       series: [
-        { name: 'MAE', type: 'bar', data: hours.map((x) => x.mae), itemStyle: { color: 'rgba(15, 76, 92, 0.75)' }, barCategoryGap: '30%', tooltip: { valueFormatter: gwFmt } },
-        { name: 'Bias', type: 'line', data: hours.map((x) => x.bias), symbolSize: 4, lineStyle: { color: C.amber, width: 1.5 }, itemStyle: { color: C.amber }, tooltip: { valueFormatter: gwFmt } },
+        { name: 'MAE', type: 'bar', data: hours.map((entry) => entry.mae), itemStyle: { color: 'rgba(15, 76, 92, 0.75)' }, barCategoryGap: '30%', tooltip: { valueFormatter: gwFmt } },
+        { name: 'Bias', type: 'line', data: hours.map((entry) => entry.bias), symbolSize: 4, lineStyle: { color: COLORS.amber, width: 1.5 }, itemStyle: { color: COLORS.amber }, tooltip: { valueFormatter: gwFmt } },
       ],
     }
     const lead: EChartsOption = {
       legend: { data: ['MAE', 'Bias'] },
-      xAxis: axis({ type: 'category', data: leads.map((x) => `${x.h}h`), name: 'Hours ahead', nameLocation: 'middle', nameGap: 28, splitLine: { show: false } }),
+      xAxis: axis({ type: 'category', data: leads.map((entry) => `${entry.hours_ahead}h`), name: 'Hours ahead', nameLocation: 'middle', nameGap: 28, splitLine: { show: false } }),
       yAxis: gwAxis(),
       series: [
         {
-          name: 'MAE', type: 'line', data: leads.map((x) => x.mae), symbolSize: 5, lineStyle: { color: C.accent, width: 2 }, itemStyle: { color: C.accent }, tooltip: { valueFormatter: gwFmt },
-          markArea: span ? { silent: true, itemStyle: { color: C.band }, data: [[{ xAxis: snap(span[0], Math.floor) }, { xAxis: snap(span[1], Math.ceil) }]] } : undefined,
+          name: 'MAE', type: 'line', data: leads.map((entry) => entry.mae), symbolSize: 5, lineStyle: { color: COLORS.accent, width: 2 }, itemStyle: { color: COLORS.accent }, tooltip: { valueFormatter: gwFmt },
+          markArea: span ? { silent: true, itemStyle: { color: COLORS.band }, data: [[{ xAxis: snap(span[0], Math.floor) }, { xAxis: snap(span[1], Math.ceil) }]] } : undefined,
         },
-        { name: 'Bias', type: 'line', data: leads.map((x) => x.bias), symbolSize: 5, lineStyle: { color: C.amber, width: 1.5 }, itemStyle: { color: C.amber }, tooltip: { valueFormatter: gwFmt } },
+        { name: 'Bias', type: 'line', data: leads.map((entry) => entry.bias), symbolSize: 5, lineStyle: { color: COLORS.amber, width: 1.5 }, itemStyle: { color: COLORS.amber }, tooltip: { valueFormatter: gwFmt } },
       ],
     }
     return { daily, hourly, lead }
   }, [data, run])
 }
 
-function Kpi(p: { label: string; value: string; unit?: string; sub?: string; text?: boolean; over?: boolean }) {
+function Kpi({ label, value, unit, sub, text, over }: {
+  label: string; value: string; unit?: string; sub?: string; text?: boolean; over?: boolean
+}) {
   return (
     <div className="kpi">
-      <div className="label">{p.label}</div>
-      <div className={`value${p.text ? ' text' : ''}${p.over ? ' over' : ''}`}>
-        {p.value}
-        {p.unit && <small>{p.unit}</small>}
+      <div className="label">{label}</div>
+      <div className={`value${text ? ' text' : ''}${over ? ' over' : ''}`}>
+        {value}
+        {unit && <small>{unit}</small>}
       </div>
-      {p.sub && <div className="sub">{p.sub}</div>}
+      {sub && <div className="sub">{sub}</div>}
     </div>
   )
 }
